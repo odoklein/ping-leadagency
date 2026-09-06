@@ -107,6 +107,15 @@ function SidebarNavItem({
                     </div>
                 </div>
             )}
+
+            {isExpanded && item.description && (
+                <div className="cp-tooltip cp-tooltip-detailed">
+                    <div className="cp-tooltip-inner cp-tooltip-inner-detailed">
+                        <span className="cp-tooltip-detail-title">{item.label}</span>
+                        <span className="cp-tooltip-detail-desc">{item.description}</span>
+                    </div>
+                </div>
+            )}
         </>
     );
 

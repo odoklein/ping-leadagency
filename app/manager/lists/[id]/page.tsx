@@ -1,30 +1,36 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Card, Badge, Button, DataTable, ConfirmModal, useToast } from "@/components/ui";
-import type { Column } from "@/components/ui/DataTable";
-import { CompanyDrawer, ContactDrawer } from "@/components/drawers";
+import { DataTable, ConfirmModal, DropdownMenu, useToast } from "@/components/ui";
+import type { Column, DropdownMenuItem } from "@/components/ui";
 import dynamic from "next/dynamic";
 import {
     ArrowLeft,
-    List,
     Building2,
     Users,
     Edit,
     Trash2,
     Download,
-    Mail,
-    CheckCircle,
-    AlertCircle,
-    Clock,
+    MoreHorizontal,
     RefreshCw,
     Plus,
 } from "lucide-react";
 import Link from "next/link";
 import { ProspectionHealthPanel } from "@/components/lists/ProspectionHealthPanel";
 
+// The three drawers together are ~5 900 lines. Only one can ever be on screen,
+// and on most visits none of them opens at all, so none belongs in the initial
+// bundle for a page whose job is to render a table.
+const CompanyDrawer = dynamic(
+    () => import("@/components/drawers/CompanyDrawer").then((m) => ({ default: m.CompanyDrawer })),
+    { ssr: false }
+);
+const ContactDrawer = dynamic(
+    () => import("@/components/drawers/ContactDrawer").then((m) => ({ default: m.ContactDrawer })),
+    { ssr: false }
+);
 const UnifiedActionDrawer = dynamic(
     () => import("@/components/drawers/UnifiedActionDrawer").then((m) => ({ default: m.UnifiedActionDrawer })),
     { ssr: false }
@@ -53,6 +59,8 @@ interface ListDetail {
     updatedAt: string;
 }
 
+type CompletenessStatus = "INCOMPLETE" | "PARTIAL" | "ACTIONABLE";
+
 interface Company {
     id: string;
     name: string;
@@ -61,7 +69,7 @@ interface Company {
     website: string | null;
     phone: string | null;
     size: string | null;
-    status: "INCOMPLETE" | "PARTIAL" | "ACTIONABLE";
+    status: CompletenessStatus;
     // JSON blob storing any custom fields imported from CSV
     customData?: Record<string, any> | null;
     _count: {
@@ -78,7 +86,7 @@ interface Contact {
     phone: string | null;
     title: string | null;
     linkedin: string | null;
-    status: "INCOMPLETE" | "PARTIAL" | "ACTIONABLE";
+    status: CompletenessStatus;
     companyId: string;
     companyName?: string;
 }
@@ -97,12 +105,80 @@ interface ClientInterlocuteur {
 // ============================================
 // STATUS CONFIG
 // ============================================
+// One dot + one word. The previous icon + tinted pill + colored label spent
+// three visual signals on a single fact, in every row of the table.
 
-const STATUS_CONFIG = {
-    INCOMPLETE: { label: "Incomplet", color: "text-red-500", bg: "bg-red-50", icon: AlertCircle },
-    PARTIAL: { label: "Partiel", color: "text-amber-500", bg: "bg-amber-50", icon: Clock },
-    ACTIONABLE: { label: "Actionnable", color: "text-emerald-500", bg: "bg-emerald-50", icon: CheckCircle },
+const STATUS_CONFIG: Record<CompletenessStatus, { label: string; dot: string; text: string }> = {
+    INCOMPLETE: { label: "Incomplet", dot: "bg-[var(--elan-danger)]", text: "text-ink-soft" },
+    PARTIAL: { label: "Partiel", dot: "bg-[var(--elan-amber)]", text: "text-ink-soft" },
+    ACTIONABLE: { label: "Actionnable", dot: "bg-[var(--elan-success)]", text: "text-ink-soft" },
 };
+
+const STATUS_ORDER: CompletenessStatus[] = ["ACTIONABLE", "PARTIAL", "INCOMPLETE"];
+
+function StatusCell({ status }: { status: CompletenessStatus }) {
+    const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.INCOMPLETE;
+    return (
+        <span className="inline-flex items-center gap-2 whitespace-nowrap">
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${config.dot}`} />
+            <span className={`text-xs ${config.text}`}>{config.label}</span>
+        </span>
+    );
+}
+
+// ============================================
+// FILTER CHIPS
+// ============================================
+// Replaces scanning 15 status badges per page with one click.
+
+type StatusFilter = "ALL" | CompletenessStatus;
+
+function FilterChips({
+    value,
+    onChange,
+    counts,
+    total,
+}: {
+    value: StatusFilter;
+    onChange: (next: StatusFilter) => void;
+    counts: Record<CompletenessStatus, number>;
+    total: number;
+}) {
+    const chips: Array<{ key: StatusFilter; label: string; count: number; dot?: string }> = [
+        { key: "ALL", label: "Tous", count: total },
+        ...STATUS_ORDER.map((status) => ({
+            key: status as StatusFilter,
+            label: STATUS_CONFIG[status].label,
+            count: counts[status],
+            dot: STATUS_CONFIG[status].dot,
+        })),
+    ];
+
+    return (
+        <div className="flex flex-wrap items-center gap-1.5">
+            {chips.map((chip) => {
+                const active = value === chip.key;
+                return (
+                    <button
+                        key={chip.key}
+                        type="button"
+                        onClick={() => onChange(chip.key)}
+                        aria-pressed={active}
+                        className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-elan border text-xs font-medium transition-colors ${
+                            active
+                                ? "border-amber bg-eucalyptus text-ink"
+                                : "border-line bg-surface text-ink-soft hover:border-line-strong"
+                        }`}
+                    >
+                        {chip.dot && <span className={`w-1.5 h-1.5 rounded-full ${chip.dot}`} />}
+                        {chip.label}
+                        <span className="text-slate tabular-nums">{chip.count}</span>
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
 
 // ============================================
 // LIST DETAIL PAGE
@@ -114,15 +190,20 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
     const searchParams = useSearchParams();
     const { success, error: showError } = useToast();
 
+    // Everything under /manager is MANAGER-only (see middleware.ts), so this page
+    // never renders for another role. It is still forwarded to the drawers, which
+    // are shared with the SDR surface and do gate on it.
     const isManager = session?.user?.role === "MANAGER";
 
     const [listId, setListId] = useState<string>("");
     const [list, setList] = useState<ListDetail | null>(null);
     const [companies, setCompanies] = useState<Company[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [view, setView] = useState<"companies" | "contacts">("companies");
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
 
     // Drawer states
     const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
@@ -146,42 +227,52 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
     // FETCH LIST
     // ============================================
 
-    const fetchList = async () => {
-        if (!listId) return;
+    const fetchList = useCallback(
+        async ({ silent = false }: { silent?: boolean } = {}) => {
+            if (!listId) return;
 
-        setIsLoading(true);
-        try {
-            const [listRes, companiesRes] = await Promise.all([
-                fetch(`/api/lists/${listId}`),
-                fetch(`/api/lists/${listId}/companies`),
-            ]);
+            if (silent) setIsRefreshing(true);
+            else setIsLoading(true);
 
-            const listJson = await listRes.json();
-            const companiesJson = await companiesRes.json();
+            try {
+                const [listRes, companiesRes] = await Promise.all([
+                    fetch(`/api/lists/${listId}`),
+                    fetch(`/api/lists/${listId}/companies`),
+                ]);
 
-            if (listJson.success) {
-                setList(listJson.data);
-            } else {
-                showError("Erreur", listJson.error || "Liste non trouvée");
-                router.push("/manager/lists");
+                const listJson = await listRes.json();
+                const companiesJson = await companiesRes.json();
+
+                if (listJson.success) {
+                    setList(listJson.data);
+                } else {
+                    showError("Erreur", listJson.error || "Liste non trouvée");
+                    router.push("/manager/lists");
+                }
+
+                if (companiesJson.success) {
+                    setCompanies(companiesJson.data);
+                }
+            } catch (err) {
+                console.error("Failed to fetch list:", err);
+                showError("Erreur", "Impossible de charger la liste");
+            } finally {
+                setIsLoading(false);
+                setIsRefreshing(false);
             }
-
-            if (companiesJson.success) {
-                setCompanies(companiesJson.data);
-            }
-        } catch (err) {
-            console.error("Failed to fetch list:", err);
-            showError("Erreur", "Impossible de charger la liste");
-        } finally {
-            setIsLoading(false);
-        }
-    };
+        },
+        // showError/router are stable in practice; listId is the real dependency.
+        [listId] // eslint-disable-line react-hooks/exhaustive-deps
+    );
 
     useEffect(() => {
         if (listId) {
             fetchList();
         }
-    }, [listId]);
+    }, [listId, fetchList]);
+
+    // A row action can change counts; refresh without flashing the skeleton.
+    const refreshQuietly = useCallback(() => fetchList({ silent: true }), [fetchList]);
 
     useEffect(() => {
         const missionId = list?.mission?.id;
@@ -205,18 +296,73 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
         };
     }, [list?.mission?.id]);
 
+    // ============================================
+    // DERIVED DATA
+    // ============================================
+    // All of these walk every company (and every contact). Memoized so typing in
+    // the table's search box doesn't re-flatten the whole list on each keystroke.
+
+    const allContacts = useMemo<(Contact & { companyName: string })[]>(
+        () =>
+            companies.flatMap((company) =>
+                company.contacts.map((contact) => ({
+                    ...contact,
+                    companyId: company.id,
+                    companyName: company.name,
+                }))
+            ),
+        [companies]
+    );
+
+    const totalContacts = useMemo(
+        () => companies.reduce((acc, c) => acc + c._count.contacts, 0),
+        [companies]
+    );
+
+    const companyStatusCounts = useMemo(() => {
+        const counts: Record<CompletenessStatus, number> = { INCOMPLETE: 0, PARTIAL: 0, ACTIONABLE: 0 };
+        for (const company of companies) {
+            if (counts[company.status] !== undefined) counts[company.status] += 1;
+        }
+        return counts;
+    }, [companies]);
+
+    const contactStatusCounts = useMemo(() => {
+        const counts: Record<CompletenessStatus, number> = { INCOMPLETE: 0, PARTIAL: 0, ACTIONABLE: 0 };
+        for (const contact of allContacts) {
+            if (counts[contact.status] !== undefined) counts[contact.status] += 1;
+        }
+        return counts;
+    }, [allContacts]);
+
+    const visibleCompanies = useMemo(
+        () => (statusFilter === "ALL" ? companies : companies.filter((c) => c.status === statusFilter)),
+        [companies, statusFilter]
+    );
+
+    const visibleContacts = useMemo(
+        () => (statusFilter === "ALL" ? allContacts : allContacts.filter((c) => c.status === statusFilter)),
+        [allContacts, statusFilter]
+    );
+
+    // Discover all custom field keys present in this list's companies
+    const customCompanyFieldKeys = useMemo(
+        () =>
+            Array.from(
+                new Set(
+                    companies.flatMap((company) =>
+                        company.customData ? Object.keys(company.customData) : []
+                    )
+                )
+            ),
+        [companies]
+    );
+
     // Open contact + company drawers from URL (e.g. from global search)
     useEffect(() => {
         const contactId = searchParams.get("contactId");
         const companyId = searchParams.get("companyId");
         if (!contactId || !companyId || isLoading || !list || hasAppliedUrlDrawers.current || companies.length === 0) return;
-        const allContacts: (Contact & { companyName: string })[] = companies.flatMap((company) =>
-            company.contacts.map((contact) => ({
-                ...contact,
-                companyId: company.id,
-                companyName: company.name,
-            }))
-        );
         const contact = allContacts.find((c) => c.id === contactId);
         const company = companies.find((c) => c.id === companyId);
         if (contact && company) {
@@ -227,7 +373,7 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
             setShowContactDrawer(true);
             router.replace(`/manager/lists/${listId}`, { scroll: false });
         }
-    }, [searchParams, isLoading, list, companies, listId, router]);
+    }, [searchParams, isLoading, list, companies, allContacts, listId, router]);
 
     // ============================================
     // DRAWER HANDLERS
@@ -248,13 +394,13 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
         setSelectedCompany((prev) => (prev?.id === updatedCompany.id ? { ...prev, ...updatedCompany } : prev));
         // Refresh list to update counts if needed
         if (updatedCompany._count.contacts !== selectedCompany?._count.contacts) {
-            fetchList();
+            refreshQuietly();
         }
     };
 
     const handleCompanyCreate = (newCompany: Company) => {
         setCompanies((prev) => [newCompany, ...prev]);
-        fetchList(); // Refresh to update counts
+        refreshQuietly();
     };
 
     const handleContactCreate = (newContact: Contact & { companyName: string }) => {
@@ -273,7 +419,7 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
                 return company;
             })
         );
-        fetchList(); // Refresh to update counts
+        refreshQuietly();
     };
 
     const handleContactUpdate = (updatedContact: Contact) => {
@@ -302,13 +448,13 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
 
         // Update selected company's contacts if open
         if (selectedCompany && selectedCompany.id === updatedContact.companyId) {
-            setSelectedCompany(prev => {
+            setSelectedCompany((prev) => {
                 if (!prev) return null;
                 return {
                     ...prev,
-                    contacts: prev.contacts.map(c => c.id === updatedContact.id ? updatedContact : c)
-                }
-            })
+                    contacts: prev.contacts.map((c) => (c.id === updatedContact.id ? updatedContact : c)),
+                };
+            });
         }
     };
 
@@ -319,18 +465,14 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
         setSelectedContact({
             ...contact,
             companyName: selectedCompany.name,
-            companyId: selectedCompany.id
+            companyId: selectedCompany.id,
         });
-        // We keep company drawer open but maybe overlay or switch? 
-        // For better UX, let's close company and open contact, or just stack them.
-        // Stacking might be complex with current implementation (one z-index).
-        // Let's close company drawer and open contact drawer for now.
         setShowCompanyDrawer(false);
         setTimeout(() => setShowContactDrawer(true), 100);
     };
 
     // ============================================
-    // DELETE LIST
+    // LIST ACTIONS
     // ============================================
 
     const handleDelete = async () => {
@@ -350,7 +492,7 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
             } else {
                 showError("Erreur", json.error);
             }
-        } catch (err) {
+        } catch {
             showError("Erreur", "Impossible de supprimer la liste");
         } finally {
             setIsDeleting(false);
@@ -358,27 +500,10 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
         }
     };
 
-    // ============================================
-    // EXPORT CSV
-    // ============================================
-
     const handleExport = () => {
         if (!list) return;
         window.location.href = `/api/lists/${list.id}/export`;
     };
-
-    // ============================================
-    // CUSTOM COMPANY FIELDS (FROM CSV IMPORT)
-    // ============================================
-
-    // Discover all custom field keys present in this list's companies
-    const customCompanyFieldKeys = Array.from(
-        new Set(
-            companies.flatMap((company) =>
-                company.customData ? Object.keys(company.customData) : []
-            )
-        )
-    );
 
     const formatCustomFieldLabel = (key: string) => {
         // Convert snake_case / camelCase to "Title Case"
@@ -395,200 +520,189 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
     // ============================================
     // COMPANY TABLE COLUMNS
     // ============================================
+    // Four primary columns. Industrie/Pays and every imported CSV field are
+    // secondary — reachable from the "+N colonnes" menu, not shown by default.
 
-    const companyColumns: Column<Company>[] = [
-        {
-            key: "name",
-            header: "Société",
-            sortable: true,
-            render: (_, company) => (
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center">
-                        <Building2 className="w-5 h-5 text-indigo-500" />
-                    </div>
-                    <div>
-                        <p className="font-medium text-slate-900">{company.name}</p>
+    const companyColumns = useMemo<Column<Company>[]>(
+        () => [
+            {
+                key: "name",
+                header: "Société",
+                sortable: true,
+                render: (_, company) => (
+                    <div className="min-w-0">
+                        <p className="font-medium text-ink truncate">{company.name}</p>
                         {company.website && (
                             <a
                                 href={company.website.startsWith("http") ? company.website : `https://${company.website}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-xs text-indigo-600 hover:underline"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-xs text-amber hover:underline truncate block"
                             >
                                 {company.website}
                             </a>
                         )}
                     </div>
-                </div>
-            ),
-        },
-        {
-            key: "industry",
-            header: "Industrie",
-            sortable: true,
-            render: (value) => <span className="text-slate-600">{value || "—"}</span>,
-        },
-        {
-            key: "country",
-            header: "Pays",
-            sortable: true,
-            render: (value) => <span className="text-slate-600">{value || "—"}</span>,
-        },
-        {
-            key: "phone",
-            header: "Téléphone",
-            sortable: true,
-            render: (value) => (
-                <span className="text-slate-600">
-                    {value ? value : "—"}
-                </span>
-            ),
-        },
-        {
-            key: "contacts",
-            header: "Contacts",
-            render: (_, company) => (
-                <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-slate-400" />
-                    <span className="text-slate-700">{company._count.contacts}</span>
-                </div>
-            ),
-        },
-        {
-            key: "status",
-            header: "Statut",
-            render: (value) => {
-                const config = STATUS_CONFIG[value as keyof typeof STATUS_CONFIG];
-                const Icon = config.icon;
-                return (
-                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${config.bg}`}>
-                        <Icon className={`w-3.5 h-3.5 ${config.color}`} />
-                        <span className={`text-xs font-medium ${config.color}`}>{config.label}</span>
-                    </div>
-                );
+                ),
             },
-        },
-    ];
+            {
+                key: "contacts",
+                header: "Contacts",
+                render: (_, company) => (
+                    <span className="text-ink-soft tabular-nums">{company._count.contacts}</span>
+                ),
+            },
+            {
+                key: "phone",
+                header: "Téléphone",
+                sortable: true,
+                render: (value) =>
+                    value ? (
+                        <a
+                            href={`tel:${value}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-ink-soft text-sm hover:text-amber"
+                        >
+                            {value}
+                        </a>
+                    ) : (
+                        <span className="text-slate">—</span>
+                    ),
+            },
+            {
+                key: "status",
+                header: "Statut",
+                render: (value) => <StatusCell status={value as CompletenessStatus} />,
+            },
+            {
+                key: "industry",
+                header: "Industrie",
+                sortable: true,
+                importance: "secondary",
+                render: (value) => <span className="text-ink-soft">{value || "—"}</span>,
+            },
+            {
+                key: "country",
+                header: "Pays",
+                sortable: true,
+                importance: "secondary",
+                render: (value) => <span className="text-ink-soft">{value || "—"}</span>,
+            },
+        ],
+        []
+    );
 
     // Dynamically build columns for any custom company fields imported from CSV
-    const customCompanyColumns: Column<Company>[] = customCompanyFieldKeys.map((fieldKey) => ({
-        key: `custom_${fieldKey}`,
-        header: formatCustomFieldLabel(fieldKey),
-        sortable: false,
-        importance: "secondary",
-        render: (_, company) => {
-            const value = company.customData ? company.customData[fieldKey] : undefined;
-            if (value === null || value === undefined || value === "") {
-                return <span className="text-slate-400">—</span>;
-            }
-            return <span className="text-slate-600">{String(value)}</span>;
-        },
-    }));
+    const customCompanyColumns = useMemo<Column<Company>[]>(
+        () =>
+            customCompanyFieldKeys.map((fieldKey) => ({
+                key: `custom_${fieldKey}`,
+                header: formatCustomFieldLabel(fieldKey),
+                sortable: false,
+                importance: "secondary",
+                render: (_, company) => {
+                    const value = company.customData ? company.customData[fieldKey] : undefined;
+                    if (value === null || value === undefined || value === "") {
+                        return <span className="text-slate">—</span>;
+                    }
+                    return <span className="text-ink-soft">{String(value)}</span>;
+                },
+            })),
+        [customCompanyFieldKeys]
+    );
+
+    const companyTableColumns = useMemo(
+        () => [...companyColumns, ...customCompanyColumns],
+        [companyColumns, customCompanyColumns]
+    );
 
     // ============================================
     // CONTACT TABLE COLUMNS
     // ============================================
 
-    // Flatten contacts from all companies
-    const allContacts: (Contact & { companyName: string })[] = companies.flatMap((company) =>
-        company.contacts.map((contact) => ({
-            ...contact,
-            companyId: company.id,
-            companyName: company.name,
-        }))
-    );
-
-    const contactColumns: Column<Contact & { companyName: string }>[] = [
-        {
-            key: "firstName",
-            header: "Contact",
-            sortable: true,
-            render: (_, contact) => (
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center">
-                        <Users className="w-5 h-5 text-emerald-500" />
-                    </div>
-                    <div>
-                        <p className="font-medium text-slate-900">
-                            {contact.firstName || ""} {contact.lastName || ""}
+    const contactColumns = useMemo<Column<Contact & { companyName: string }>[]>(
+        () => [
+            {
+                key: "firstName",
+                header: "Contact",
+                sortable: true,
+                render: (_, contact) => (
+                    <div className="min-w-0">
+                        <p className="font-medium text-ink truncate">
+                            {[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "—"}
                         </p>
-                        <p className="text-xs text-slate-500">{contact.title || "—"}</p>
+                        {contact.title && (
+                            <p className="text-xs text-slate truncate">{contact.title}</p>
+                        )}
                     </div>
-                </div>
-            ),
-        },
-        {
-            key: "companyName",
-            header: "Société",
-            sortable: true,
-            render: (value) => <span className="text-slate-700 font-medium">{value}</span>,
-        },
-        {
-            key: "email",
-            header: "Email",
-            render: (value) => {
-                if (!value) return <span className="text-slate-400">—</span>;
-                if (!isManager) {
-                    const [user, domain] = value.split("@");
-                    return <span className="text-slate-500 font-mono text-xs">{user[0]}***@{domain}</span>;
-                }
-                return (
-                    <a href={`mailto:${value}`} className="text-indigo-600 hover:underline text-sm">
-                        {value}
-                    </a>
-                );
+                ),
             },
-        },
-        {
-            key: "phone",
-            header: "Téléphone",
-            render: (value) => {
-                if (!value) return <span className="text-slate-400">—</span>;
-                if (!isManager) {
-                    return <span className="text-slate-500 font-mono text-xs">{value.substring(0, 3)}*******</span>;
-                }
-                return (
-                    <a href={`tel:${value}`} className="text-slate-600 text-sm">
-                        {value}
-                    </a>
-                );
+            {
+                key: "companyName",
+                header: "Société",
+                sortable: true,
+                render: (value) => <span className="text-ink-soft truncate">{value}</span>,
             },
-        },
-        {
-            key: "linkedin",
-            header: "LinkedIn",
-            render: (value) => {
-                if (!value) return <span className="text-slate-400">—</span>;
-                if (!isManager) {
-                    return <span className="text-slate-500 font-mono text-xs">Profil masqué</span>;
-                }
-                return (
-                    <a
-                        href={value.startsWith("http") ? value : `https://${value}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-indigo-600 hover:underline text-sm"
-                    >
-                        Profil
-                    </a>
-                );
+            {
+                key: "email",
+                header: "Email",
+                render: (value) =>
+                    value ? (
+                        <a
+                            href={`mailto:${value}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-amber hover:underline text-sm"
+                        >
+                            {value}
+                        </a>
+                    ) : (
+                        <span className="text-slate">—</span>
+                    ),
             },
-        },
-        {
-            key: "status",
-            header: "Statut",
-            render: (value) => {
-                const config = STATUS_CONFIG[value as keyof typeof STATUS_CONFIG];
-                const Icon = config.icon;
-                return (
-                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${config.bg}`}>
-                        <Icon className={`w-3.5 h-3.5 ${config.color}`} />
-                        <span className={`text-xs font-medium ${config.color}`}>{config.label}</span>
-                    </div>
-                );
+            {
+                key: "phone",
+                header: "Téléphone",
+                render: (value) =>
+                    value ? (
+                        <a
+                            href={`tel:${value}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-ink-soft text-sm hover:text-amber"
+                        >
+                            {value}
+                        </a>
+                    ) : (
+                        <span className="text-slate">—</span>
+                    ),
             },
-        },
-    ];
+            {
+                key: "status",
+                header: "Statut",
+                render: (value) => <StatusCell status={value as CompletenessStatus} />,
+            },
+            {
+                key: "linkedin",
+                header: "LinkedIn",
+                importance: "secondary",
+                render: (value) =>
+                    value ? (
+                        <a
+                            href={value.startsWith("http") ? value : `https://${value}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-amber hover:underline text-sm"
+                        >
+                            Profil
+                        </a>
+                    ) : (
+                        <span className="text-slate">—</span>
+                    ),
+            },
+        ],
+        []
+    );
 
     // ============================================
     // LOADING STATE
@@ -596,313 +710,286 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
 
     if (isLoading || !list) {
         return (
-            <div className="space-y-6">
+            <div className="elan-page space-y-4">
                 <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-slate-200 rounded-xl animate-pulse" />
+                    <div className="w-9 h-9 bg-paper-2 rounded-elan animate-pulse" />
                     <div className="space-y-2">
-                        <div className="h-6 w-48 bg-slate-200 rounded animate-pulse" />
-                        <div className="h-4 w-32 bg-slate-200 rounded animate-pulse" />
+                        <div className="h-6 w-56 bg-paper-2 rounded animate-pulse" />
+                        <div className="h-3.5 w-40 bg-paper-2 rounded animate-pulse" />
                     </div>
                 </div>
-                <div className="grid grid-cols-4 gap-4">
-                    {[1, 2, 3, 4].map((i) => (
-                        <Card key={i}>
-                            <div className="h-16 bg-slate-200 rounded animate-pulse" />
-                        </Card>
-                    ))}
-                </div>
+                <div className="h-14 bg-paper-2 rounded-elan-lg animate-pulse" />
+                <div className="h-96 bg-paper-2 rounded-elan-lg animate-pulse" />
             </div>
         );
     }
 
-    const totalContacts = companies.reduce((acc, c) => acc + c._count.contacts, 0);
-    const actionableCount = companies.filter((c) => c.status === "ACTIONABLE").length;
+    const listActions: DropdownMenuItem[] = [
+        {
+            label: "Exporter en CSV",
+            icon: <Download className="w-4 h-4" />,
+            onClick: handleExport,
+        },
+        {
+            label: "Modifier la liste",
+            icon: <Edit className="w-4 h-4" />,
+            onClick: () => router.push(`/manager/lists/${list.id}/edit`),
+        },
+        {
+            label: isRefreshing ? "Actualisation…" : "Actualiser",
+            icon: <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />,
+            onClick: refreshQuietly,
+            disabled: isRefreshing,
+        },
+        {
+            label: "Supprimer la liste",
+            icon: <Trash2 className="w-4 h-4" />,
+            onClick: () => setShowDeleteModal(true),
+            variant: "danger",
+            divider: true,
+        },
+    ];
+
+    const isCompaniesView = view === "companies";
+    const activeCounts = isCompaniesView ? companyStatusCounts : contactStatusCounts;
+    const activeTotal = isCompaniesView ? companies.length : allContacts.length;
 
     return (
-        <div className="elan-page">
-            {/* Premium Header */}
-            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                <div className="flex items-start gap-5">
-                    <Link href={isManager ? "/manager/lists" : "/sdr/lists"}>
-                        <button className="flex items-center justify-center w-10 h-10 rounded-full border border-slate-200 bg-white text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 transition-all shadow-sm">
-                            <ArrowLeft className="w-5 h-5" />
-                        </button>
-                    </Link>
-                    <div className="flex items-start gap-4">
-                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-50 to-slate-100 flex items-center justify-center border border-indigo-100/50 shadow-sm">
-                            <List className="w-7 h-7 text-indigo-600" />
-                        </div>
-                        <div className="pt-1">
-                            <div className="flex items-center gap-3 mb-1.5">
-                                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">{list.name}</h1>
-                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
-                                    {list.type}
-                                </span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
-                                <Building2 className="w-4 h-4 text-slate-400" />
-                                <span>{list.mission.client.name}</span>
-                                <span className="text-slate-300">•</span>
-                                <span className="text-indigo-600">{list.mission.name}</span>
-                                {list.source && (
-                                    <>
-                                        <span className="text-slate-300">•</span>
-                                        <span>Source: {list.source}</span>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={fetchList}
-                        title="Rafraîchir"
-                        className="flex items-center justify-center w-10 h-10 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-indigo-600 hover:bg-slate-50 transition-colors shadow-sm"
+        <div className="elan-page space-y-4">
+            {/* ── 1. Identity row ─────────────────────────────────────────────
+                Who am I looking at, how do I get back, what can I do to it.
+                Destructive and rare actions live behind the ⋯ menu so the one
+                primary action is unambiguous. */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                    <Link
+                        href="/manager/lists"
+                        aria-label="Retour aux listes"
+                        className="flex items-center justify-center w-9 h-9 flex-shrink-0 rounded-elan border border-line bg-surface text-slate hover:text-ink hover:border-line-strong transition-colors"
                     >
-                        <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+                        <ArrowLeft className="w-4 h-4" />
+                    </Link>
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <h1 className="text-xl font-semibold text-ink tracking-tight truncate">
+                                {list.name}
+                            </h1>
+                            <span className="flex-shrink-0 text-[10px] font-medium uppercase tracking-[0.07em] text-slate border border-line rounded px-1.5 py-0.5">
+                                {list.type}
+                            </span>
+                        </div>
+                        <p className="text-xs text-slate truncate">
+                            {list.mission.client.name}
+                            <span className="mx-1.5 text-line-strong">/</span>
+                            {list.mission.name}
+                            {list.source && (
+                                <>
+                                    <span className="mx-1.5 text-line-strong">/</span>
+                                    {list.source}
+                                </>
+                            )}
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                        onClick={() => {
+                            if (isCompaniesView) {
+                                setIsCreatingCompany(true);
+                                setSelectedCompany(null);
+                                setShowCompanyDrawer(true);
+                            } else {
+                                setIsCreatingContact(true);
+                                setSelectedContact(null);
+                                setShowContactDrawer(true);
+                            }
+                        }}
+                        disabled={!isCompaniesView && companies.length === 0}
+                        className="mgr-btn-primary inline-flex items-center gap-2 h-9 px-3.5 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <Plus className="w-4 h-4" />
+                        {isCompaniesView ? "Société" : "Contact"}
                     </button>
-                    {isManager && (
-                        <>
-                            <button
-                                onClick={handleExport}
-                                className="flex items-center gap-2 h-10 px-4 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
+                    <DropdownMenu
+                        align="right"
+                        width={200}
+                        items={listActions}
+                        trigger={
+                            <span
+                                role="button"
+                                aria-label="Actions sur la liste"
+                                className="flex items-center justify-center w-9 h-9 rounded-elan border border-line bg-surface text-slate hover:text-ink hover:border-line-strong transition-colors cursor-pointer"
                             >
-                                <Download className="w-4 h-4 text-slate-400" />
-                                Exporter
-                            </button>
-                            <Link
-                                href={`/manager/lists/${list.id}/edit`}
-                                className="flex items-center gap-2 h-10 px-4 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
-                            >
-                                <Edit className="w-4 h-4 text-slate-400" />
-                                Modifier
-                            </Link>
-                            <button
-                                onClick={() => setShowDeleteModal(true)}
-                                className="flex items-center justify-center w-10 h-10 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 hover:border-red-300 transition-colors shadow-sm"
-                                title="Supprimer la liste"
-                            >
-                                <Trash2 className="w-4 h-4" />
-                            </button>
-                        </>
-                    )}
+                                <MoreHorizontal className="w-4 h-4" />
+                            </span>
+                        }
+                    />
                 </div>
             </div>
 
-            {/* Premium Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-                <div className="mgr-stat-card">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center">
-                            <Building2 className="w-6 h-6 text-indigo-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-slate-900">{companies.length}</p>
-                            <p className="text-sm font-medium text-slate-500">Sociétés</p>
-                        </div>
-                    </div>
+            {/* ── 2. Pulse strip ──────────────────────────────────────────────
+                The four stat cards said what the tab labels and the coverage bar
+                already say. One line of counts, then the health summary — the
+                full 40-metric panel is one click away instead of always open. */}
+            <div className="rounded-elan-lg border border-line bg-surface shadow-elan-sm divide-y divide-line">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
+                    <span className="text-sm text-ink">
+                        <strong className="font-semibold tabular-nums">{companies.length}</strong>{" "}
+                        <span className="text-slate">sociétés</span>
+                    </span>
+                    <span className="text-sm text-ink">
+                        <strong className="font-semibold tabular-nums">{totalContacts}</strong>{" "}
+                        <span className="text-slate">contacts</span>
+                    </span>
+                    <span className="text-sm text-ink">
+                        <strong className="font-semibold tabular-nums">{companyStatusCounts.ACTIONABLE}</strong>{" "}
+                        <span className="text-slate">sociétés actionnables</span>
+                    </span>
+                    <span className="text-sm text-ink">
+                        <strong className="font-semibold tabular-nums">
+                            {allContacts.filter((c) => c.email).length}
+                        </strong>{" "}
+                        <span className="text-slate">avec e-mail</span>
+                    </span>
                 </div>
-                <div className="mgr-stat-card">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl bg-sky-100 flex items-center justify-center">
-                            <Users className="w-6 h-6 text-sky-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-slate-900">{totalContacts}</p>
-                            <p className="text-sm font-medium text-slate-500">Contacts totaux</p>
-                        </div>
-                    </div>
-                </div>
-                <div className="mgr-stat-card">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center">
-                            <CheckCircle className="w-6 h-6 text-emerald-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-slate-900">{actionableCount}</p>
-                            <p className="text-sm font-medium text-slate-500">Qualifiés / Actionnables</p>
-                        </div>
-                    </div>
-                </div>
-                <div className="mgr-stat-card">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center">
-                            <Mail className="w-6 h-6 text-violet-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-slate-900">
-                                {companies.reduce((acc, c) => acc + c.contacts.filter((ct) => ct.email).length, 0)}
-                            </p>
-                            <p className="text-sm font-medium text-slate-500">Avec adresses e-mail</p>
-                        </div>
-                    </div>
+                <div className="px-4 py-3">
+                    <ProspectionHealthPanel listId={list.id} collapsible defaultExpanded={false} />
                 </div>
             </div>
 
-            {/* Prospection Health */}
-            <Card className="p-5">
-                <div className="mb-3">
-                    <h2 className="text-lg font-bold text-slate-900">Santé de prospection</h2>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                        Indicateurs calculés sur les actions réelles (couverture, cadence, ETA, alertes).
-                    </p>
-                </div>
-                <ProspectionHealthPanel listId={list.id} />
-            </Card>
-
-            {/* Data Table */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col min-h-[500px]">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                    <h2 className="text-xl font-bold text-slate-900">
-                        {view === "companies" ? "Répertoire des Sociétés" : "Annuaire des Contacts"}
-                    </h2>
-                    <div className="flex flex-wrap items-center gap-3">
-                        {isManager && (
-                            <>
-                                {view === "companies" ? (
-                                    <button
-                                        onClick={() => {
-                                            setIsCreatingCompany(true);
-                                            setSelectedCompany(null);
-                                            setShowCompanyDrawer(true);
-                                        }}
-                                        className="mgr-btn-primary flex items-center gap-2 h-10 px-4 text-sm font-medium"
-                                    >
-                                        <Plus className="w-4 h-4" />
-                                        Ajouter une société
-                                    </button>
-                                ) : (
-                                    <button
-                                        onClick={() => {
-                                            setIsCreatingContact(true);
-                                            setSelectedContact(null);
-                                            setShowContactDrawer(true);
-                                        }}
-                                        disabled={companies.length === 0}
-                                        className="mgr-btn-primary flex items-center gap-2 h-10 px-4 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        <Plus className="w-4 h-4" />
-                                        Ajouter un contact
-                                    </button>
-                                )}
-                            </>
-                        )}
-                        <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200/60 shadow-inner">
-                            <button
-                                onClick={() => setView("companies")}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 ${view === "companies"
-                                    ? "bg-white text-indigo-700 shadow border-b border-indigo-100"
-                                    : "text-slate-500 hover:text-slate-700"
-                                    }`}
-                            >
-                                <Building2 className={`w-4 h-4 ${view === "companies" ? "text-indigo-500" : "text-slate-400"}`} />
-                                Sociétés ({companies.length})
-                            </button>
-                            <button
-                                onClick={() => setView("contacts")}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 ${view === "contacts"
-                                    ? "bg-white text-indigo-700 shadow border-b border-indigo-100"
-                                    : "text-slate-500 hover:text-slate-700"
-                                    }`}
-                            >
-                                <Users className={`w-4 h-4 ${view === "contacts" ? "text-indigo-500" : "text-slate-400"}`} />
-                                Contacts ({totalContacts})
-                            </button>
-                        </div>
+            {/* ── 3. Work surface ─────────────────────────────────────────────
+                Everything above this point fits in ~150px, so the first row of
+                real data is visible without scrolling. */}
+            <div className="rounded-elan-lg border border-line bg-surface shadow-elan-sm overflow-hidden">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-line">
+                    <div className="inline-flex items-center p-0.5 bg-paper rounded-elan border border-line">
+                        <button
+                            onClick={() => {
+                                setView("companies");
+                                setStatusFilter("ALL");
+                            }}
+                            className={`inline-flex items-center gap-2 h-8 px-3 rounded-[7px] text-xs font-medium transition-colors ${
+                                isCompaniesView
+                                    ? "bg-surface text-ink shadow-elan-sm"
+                                    : "text-slate hover:text-ink"
+                            }`}
+                        >
+                            <Building2 className="w-3.5 h-3.5" />
+                            Sociétés
+                            <span className="tabular-nums text-slate">{companies.length}</span>
+                        </button>
+                        <button
+                            onClick={() => {
+                                setView("contacts");
+                                setStatusFilter("ALL");
+                            }}
+                            className={`inline-flex items-center gap-2 h-8 px-3 rounded-[7px] text-xs font-medium transition-colors ${
+                                !isCompaniesView
+                                    ? "bg-surface text-ink shadow-elan-sm"
+                                    : "text-slate hover:text-ink"
+                            }`}
+                        >
+                            <Users className="w-3.5 h-3.5" />
+                            Contacts
+                            <span className="tabular-nums text-slate">{totalContacts}</span>
+                        </button>
                     </div>
+
+                    <FilterChips
+                        value={statusFilter}
+                        onChange={setStatusFilter}
+                        counts={activeCounts}
+                        total={activeTotal}
+                    />
                 </div>
 
-                {view === "companies" ? (
-                    companies.length === 0 ? (
-                        <div className="text-center py-20 flex flex-col items-center justify-center flex-1">
-                            <div className="w-16 h-16 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center mb-6">
-                                <Building2 className="w-8 h-8 text-slate-300" />
-                            </div>
-                            <h3 className="text-xl font-bold text-slate-800">Aucune société</h3>
-                            <p className="text-slate-500 mt-2 max-w-sm">
-                                Cette liste est actuellement vide. Importez des données ou ajoutez une société manuellement pour commencer.
-                            </p>
+                {activeTotal === 0 ? (
+                    <div className="flex flex-col items-center justify-center text-center py-20 px-6">
+                        <div className="w-12 h-12 rounded-full bg-paper border border-line flex items-center justify-center mb-4">
+                            {isCompaniesView ? (
+                                <Building2 className="w-5 h-5 text-slate" />
+                            ) : (
+                                <Users className="w-5 h-5 text-slate" />
+                            )}
                         </div>
-                    ) : (
-                        <div className="flex-1 min-h-0">
-                            <DataTable
-                                data={companies}
-                                columns={[...companyColumns, ...customCompanyColumns]}
-                                keyField="id"
-                                searchable
-                                searchPlaceholder="Rechercher une société (nom, industrie, pays, téléphone)..."
-                                searchFields={["name", "industry", "country", "phone"]}
-                                pagination
-                                pageSize={15}
-                                onRowClick={handleCompanyClick}
-                                enableSecondaryColumnsToggle
-                            />
-                        </div>
-                    )
+                        <h3 className="text-base font-semibold text-ink">
+                            {isCompaniesView ? "Aucune société" : "Aucun contact"}
+                        </h3>
+                        <p className="text-sm text-slate mt-1 max-w-sm">
+                            {isCompaniesView
+                                ? "Cette liste est vide. Importez un fichier ou ajoutez une société pour commencer."
+                                : "Ajoutez un contact depuis une société, ou importez un nouveau fichier."}
+                        </p>
+                    </div>
+                ) : isCompaniesView ? (
+                    <DataTable
+                        data={visibleCompanies}
+                        columns={companyTableColumns}
+                        keyField="id"
+                        searchable
+                        searchPlaceholder="Rechercher une société (nom, industrie, pays, téléphone)…"
+                        searchFields={["name", "industry", "country", "phone"]}
+                        pagination
+                        pageSize={25}
+                        onRowClick={handleCompanyClick}
+                        enableSecondaryColumnsToggle
+                        emptyMessage="Aucune société ne correspond à ce filtre"
+                    />
                 ) : (
-                    allContacts.length === 0 ? (
-                        <div className="text-center py-20 flex flex-col items-center justify-center flex-1">
-                            <div className="w-16 h-16 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center mb-6">
-                                <Users className="w-8 h-8 text-slate-300" />
-                            </div>
-                            <h3 className="text-xl font-bold text-slate-800">Aucun contact</h3>
-                            <p className="text-slate-500 mt-2 max-w-sm">
-                                Aucun contact répertorié. Vous pouvez en ajouter depuis la vue détaillée d&apos;une société ou via un nouvel import.
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="flex-1 min-h-0">
-                            <DataTable
-                                data={allContacts}
-                                columns={contactColumns}
-                                keyField="id"
-                                searchable
-                                searchPlaceholder="Rechercher un contact..."
-                                searchFields={["firstName", "lastName", "email", "phone", "companyName"]}
-                                pagination
-                                pageSize={15}
-                                onRowClick={handleContactClick}
-                            />
-                        </div>
-                    )
+                    <DataTable
+                        data={visibleContacts}
+                        columns={contactColumns}
+                        keyField="id"
+                        searchable
+                        searchPlaceholder="Rechercher un contact (nom, e-mail, téléphone, société)…"
+                        searchFields={["firstName", "lastName", "email", "phone", "companyName"]}
+                        pagination
+                        pageSize={25}
+                        onRowClick={handleContactClick}
+                        enableSecondaryColumnsToggle
+                        emptyMessage="Aucun contact ne correspond à ce filtre"
+                    />
                 )}
             </div>
 
             {/* Company Drawer */}
-            <CompanyDrawer
-                isOpen={showCompanyDrawer}
-                onClose={() => {
-                    setShowCompanyDrawer(false);
-                    setIsCreatingCompany(false);
-                    setSelectedCompany(null);
-                }}
-                company={selectedCompany}
-                onUpdate={handleCompanyUpdate}
-                onCreate={isCreatingCompany ? handleCompanyCreate : undefined}
-                onContactClick={handleCompanyContactClick}
-                isManager={isManager}
-                listId={listId}
-                isCreating={isCreatingCompany}
-            />
+            {(showCompanyDrawer || selectedCompany) && (
+                <CompanyDrawer
+                    isOpen={showCompanyDrawer}
+                    onClose={() => {
+                        setShowCompanyDrawer(false);
+                        setIsCreatingCompany(false);
+                        setSelectedCompany(null);
+                    }}
+                    company={selectedCompany}
+                    onUpdate={handleCompanyUpdate}
+                    onCreate={isCreatingCompany ? handleCompanyCreate : undefined}
+                    onContactClick={handleCompanyContactClick}
+                    isManager={isManager}
+                    listId={listId}
+                    isCreating={isCreatingCompany}
+                />
+            )}
 
             {/* Contact Drawer */}
-            <ContactDrawer
-                isOpen={showContactDrawer}
-                onClose={() => {
-                    setShowContactDrawer(false);
-                    setIsCreatingContact(false);
-                    setSelectedContact(null);
-                }}
-                contact={selectedContact}
-                onUpdate={handleContactUpdate}
-                onCreate={isCreatingContact ? handleContactCreate : undefined}
-                isManager={isManager}
-                listId={listId}
-                companies={companies}
-                isCreating={isCreatingContact}
-            />
+            {(showContactDrawer || selectedContact) && (
+                <ContactDrawer
+                    isOpen={showContactDrawer}
+                    onClose={() => {
+                        setShowContactDrawer(false);
+                        setIsCreatingContact(false);
+                        setSelectedContact(null);
+                    }}
+                    contact={selectedContact}
+                    onUpdate={handleContactUpdate}
+                    onCreate={isCreatingContact ? handleContactCreate : undefined}
+                    isManager={isManager}
+                    listId={listId}
+                    companies={companies}
+                    isCreating={isCreatingContact}
+                />
+            )}
 
             {/* Unified Action Drawer (open on row click) */}
             {unifiedDrawerTarget && (
@@ -915,7 +1002,7 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
                     missionName={list.mission.name}
                     clientBookingUrl={clientBookingUrl || undefined}
                     clientInterlocuteurs={clientInterlocuteurs}
-                    onActionRecorded={fetchList}
+                    onActionRecorded={refreshQuietly}
                     onContactSelect={(newContactId) => {
                         setUnifiedDrawerTarget((prev) => (prev ? { ...prev, contactId: newContactId } : prev));
                     }}

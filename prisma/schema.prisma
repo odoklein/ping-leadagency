@@ -863,6 +863,9 @@ model Company {
   actions       Action[]  // Actions can be on companies too
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  @@index([listId])
+  @@index([listId, status])
 }
 
 model Contact {
@@ -892,6 +895,9 @@ model Contact {
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  @@index([companyId])
+  @@index([companyId, status])
 }
 
 model Action {

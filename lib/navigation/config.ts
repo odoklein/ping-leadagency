@@ -39,6 +39,8 @@ export interface NavItem {
   href: string;
   icon: LucideIcon;
   label: string;
+  /** Short explanation shown in a hover tooltip next to the label (what this page is for). */
+  description?: string;
   permission?: string;
   roles?: UserRole[];
   badge?: string;
@@ -68,6 +70,7 @@ export const MANAGER_NAV: NavSection[] = [
         href: "/manager/dashboard",
         icon: LayoutDashboard,
         label: "Tableau de bord",
+        description: "Vue d'ensemble : KPIs de l'équipe, pipeline et alertes du jour.",
         permission: "pages.dashboard",
       },
     ],
@@ -80,30 +83,35 @@ export const MANAGER_NAV: NavSection[] = [
         href: "/manager/comms",
         icon: MessageSquare,
         label: "Messagerie",
+        description: "Discussions internes avec l'équipe et le support.",
         permission: "pages.dashboard",
       },
       {
         href: "/manager/email",
         icon: Mail,
         label: "Email",
+        description: "Pilotage des emails envoyés par les SDR et des boîtes mail connectées.",
         permission: "pages.email",
         children: [
           {
             href: "/manager/email/overview",
             icon: LayoutDashboard,
             label: "Cockpit email",
+            description: "Vue d'ensemble de l'activité email de l'équipe.",
             permission: "pages.email",
           },
           {
             href: "/manager/email/sent",
             icon: Send,
             label: "Envois équipe",
+            description: "Historique des emails envoyés par les SDR.",
             permission: "pages.email",
           },
           {
             href: "/manager/email/mailboxes",
             icon: Inbox,
             label: "Boîtes mail",
+            description: "Connexion et gestion des boîtes mail de l'équipe.",
             permission: "pages.email",
           },
         ],
@@ -117,36 +125,42 @@ export const MANAGER_NAV: NavSection[] = [
         href: "/manager/prospection",
         icon: Activity,
         label: "Cockpit",
+        description: "Suivi en temps réel de la prospection : appels, résultats, avancement des campagnes.",
         permission: "pages.missions",
       },
       {
         href: "/manager/clients",
         icon: Building2,
         label: "Clients",
+        description: "Portefeuille clients et fiches détaillées.",
         permission: "pages.clients",
       },
       {
         href: "/manager/missions",
         icon: Target,
         label: "Missions",
+        description: "Création et suivi des missions confiées à l'équipe.",
         permission: "pages.missions",
       },
       {
         href: "/manager/lists",
         icon: Database,
         label: "Listes",
+        description: "Listes de prospects importées, à assigner aux campagnes.",
         permission: "pages.lists",
       },
       {
         href: "/manager/analytics",
         icon: BarChart3,
         label: "Performance",
+        description: "Statistiques et indicateurs de performance de l'équipe.",
         permission: "pages.analytics",
         children: [
           {
             href: "/manager/analyse-ia",
             icon: Brain,
             label: "Analyse IA",
+            description: "Analyse automatique des appels et emails par l'IA.",
             permission: "pages.analytics",
           },
         ],
@@ -160,24 +174,28 @@ export const MANAGER_NAV: NavSection[] = [
         href: "/manager/planning",
         icon: CalendarDays,
         label: "Planning équipe",
+        description: "Planning des SDR : disponibilités et créneaux d'appel.",
         permission: "pages.planning",
       },
       {
         href: "/manager/utilisateurs",
         icon: Users,
         label: "Collaborateurs",
+        description: "Gestion de l'équipe SDR : évaluations et fiches collaborateurs.",
         permission: "pages.sdrs",
         children: [
           {
             href: "/manager/sdr-feedback",
             icon: MessageSquare,
             label: "Évaluations",
+            description: "Retours et évaluations de performance des SDR.",
             permission: "pages.sdrs",
           },
           {
             href: "/manager/sdrs",
             icon: UserPlus,
             label: "SDRs",
+            description: "Liste des SDR, comptes et accès.",
             permission: "pages.sdrs",
           },
         ],
@@ -186,6 +204,7 @@ export const MANAGER_NAV: NavSection[] = [
         href: "/manager/rdv",
         icon: CalendarClock,
         label: "Rendez-vous",
+        description: "Rendez-vous obtenus par l'équipe, à confirmer ou suivre.",
         permission: "pages.analytics",
       },
     ],
@@ -197,18 +216,21 @@ export const MANAGER_NAV: NavSection[] = [
         href: "/manager/projects",
         icon: FolderKanban,
         label: "Projets",
+        description: "Suivi des projets clients en cours de livraison.",
         permission: "pages.projects",
         children: [
           {
             href: "/manager/tasks",
             icon: List,
             label: "Tâches",
+            description: "Liste des tâches à réaliser sur les projets.",
             permission: "pages.projects",
           },
           {
             href: "/calendar",
             icon: CalendarClock,
             label: "Calendrier projet",
+            description: "Calendrier partagé des échéances projet.",
             permission: "pages.projects",
             openInNewTab: true,
           },
@@ -216,6 +238,7 @@ export const MANAGER_NAV: NavSection[] = [
             href: "/admin/intake",
             icon: LifeBuoy,
             label: "Intake technique",
+            description: "Formulaire de prise en charge technique d'un nouveau projet.",
             permission: "pages.projects",
           },
         ],
@@ -230,30 +253,35 @@ export const MANAGER_NAV: NavSection[] = [
         href: "/manager/settings",
         icon: Settings,
         label: "Paramètres",
+        description: "Configuration générale du CRM : intégrations, emails, téléphonie.",
         permission: "pages.settings",
       },
       {
         href: "/manager/billing",
         icon: Receipt,
         label: "Facturation",
+        description: "Factures et abonnement de l'agence.",
         permission: "pages.billing",
       },
       {
         href: "/manager/files",
         icon: FileText,
         label: "Fichiers",
+        description: "Documents partagés et fichiers de l'équipe.",
         permission: "pages.files",
       },
       {
         href: "/manager/notifications",
         icon: Bell,
         label: "Notifications",
+        description: "Centre de notifications et alertes.",
         permission: "pages.dashboard",
       },
       {
         href: "/manager/api",
         icon: Key,
         label: "API & Intégrations",
+        description: "Clés API et intégrations tierces.",
         permission: "pages.settings",
       },
     ],

@@ -228,31 +228,52 @@ export function ProspectionHealthPanel({
 
     if (isLoading) {
         return (
-            <div className="flex items-center gap-2 py-4 text-slate-400">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-xs">Calcul des métriques de santé…</span>
+            <div className="flex items-center gap-2 text-slate">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span className="text-xs">Calcul de la santé de prospection…</span>
             </div>
         );
     }
 
     if (error || !health) {
         return (
-            <div className="text-xs text-rose-500 py-2">
-                Impossible de charger les métriques de santé.
+            <div className="text-xs text-slate">
+                Santé de prospection indisponible pour le moment.
             </div>
         );
     }
 
     const { eta } = health;
 
+    // When collapsed we show a single sentence rather than 40 numbers: the most
+    // urgent recommendation, which is the only part that asks for a decision.
+    const topHint =
+        health.hints.find((h) => h.type === "CRITICAL") ??
+        health.hints.find((h) => h.type === "WARNING") ??
+        health.hints[0] ??
+        null;
+
     return (
         <div className="space-y-4">
             {/* ── Header ── */}
             <div
-                className={`flex items-center justify-between ${collapsible ? "cursor-pointer" : ""}`}
+                className={`flex items-center justify-between gap-4 ${collapsible ? "cursor-pointer" : ""}`}
                 onClick={toggleExpanded}
+                role={collapsible ? "button" : undefined}
+                tabIndex={collapsible ? 0 : undefined}
+                aria-expanded={collapsible ? expanded : undefined}
+                onKeyDown={
+                    collapsible
+                        ? (e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  toggleExpanded?.();
+                              }
+                          }
+                        : undefined
+                }
             >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                     <ProspectionHealthBadge
                         status={health.status}
                         statusLabel={health.statusLabel}
@@ -263,12 +284,19 @@ export function ProspectionHealthPanel({
                         explanation={health.activityScoreExplanation}
                         size="md"
                     />
-                    <span className="text-xs text-slate-400 font-medium">Score d'activité</span>
+                    {collapsible && !expanded && topHint ? (
+                        <span className="truncate text-xs text-ink-soft">{topHint.message}</span>
+                    ) : (
+                        <span className="text-xs text-slate font-medium">Score d&apos;activité</span>
+                    )}
                 </div>
                 {collapsible && (
-                    expanded
-                        ? <ChevronUp className="w-4 h-4 text-slate-400" />
-                        : <ChevronDown className="w-4 h-4 text-slate-400" />
+                    <span className="flex items-center gap-1 flex-shrink-0 text-[11px] font-medium text-slate">
+                        {expanded ? "Réduire" : "Détails"}
+                        {expanded
+                            ? <ChevronUp className="w-4 h-4" />
+                            : <ChevronDown className="w-4 h-4" />}
+                    </span>
                 )}
             </div>
 

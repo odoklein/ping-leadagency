@@ -32,10 +32,40 @@ export const GET = withErrorHandler(async (
     await requireRole(['MANAGER', 'SDR'], request);
     const { id } = await params;
 
+    // Selected explicitly rather than `include: { contacts: true }`. That spread
+    // every column of every contact — including the customData / createdAt /
+    // updatedAt / unsubscribed fields the list page never reads — across the
+    // wire for the whole list. These are the fields the table and the drawers
+    // actually consume.
     const companies = await prisma.company.findMany({
         where: { listId: id },
-        include: {
-            contacts: true,
+        select: {
+            id: true,
+            name: true,
+            industry: true,
+            country: true,
+            website: true,
+            phone: true,
+            size: true,
+            status: true,
+            customData: true,
+            listId: true,
+            contacts: {
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    title: true,
+                    email: true,
+                    phone: true,
+                    additionalPhones: true,
+                    additionalEmails: true,
+                    linkedin: true,
+                    status: true,
+                    companyId: true,
+                },
+                orderBy: { createdAt: 'asc' },
+            },
             _count: {
                 select: { contacts: true },
             },
