@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { DataTable, ConfirmModal, DropdownMenu, useToast } from "@/components/ui";
-import type { Column, DropdownMenuItem } from "@/components/ui";
+import { ConfirmModal, DropdownMenu, useToast } from "@/components/ui";
+import type { DropdownMenuItem } from "@/components/ui";
 import dynamic from "next/dynamic";
 import {
     ArrowLeft,
@@ -16,13 +16,28 @@ import {
     MoreHorizontal,
     RefreshCw,
     Plus,
+    Search,
+    Globe2,
+    Phone,
+    Mail,
+    X,
+    ExternalLink,
+    ChevronRight,
+    Check,
+    Copy,
+    ArrowUpDown,
+    Layers,
+    Linkedin,
+    Briefcase,
+    MapPin,
+    Eye,
+    ArrowUpRight,
+    PhoneCall,
 } from "lucide-react";
 import Link from "next/link";
-import { ProspectionHealthPanel } from "@/components/lists/ProspectionHealthPanel";
+import { ProspectionHealthPanel, type QuickFilterKey } from "@/components/lists/ProspectionHealthPanel";
 
-// The three drawers together are ~5 900 lines. Only one can ever be on screen,
-// and on most visits none of them opens at all, so none belongs in the initial
-// bundle for a page whose job is to render a table.
+// Dynamic Drawers
 const CompanyDrawer = dynamic(
     () => import("@/components/drawers/CompanyDrawer").then((m) => ({ default: m.CompanyDrawer })),
     { ssr: false }
@@ -37,7 +52,7 @@ const UnifiedActionDrawer = dynamic(
 );
 
 // ============================================
-// TYPES
+// TYPES & INTERFACES
 // ============================================
 
 interface ListDetail {
@@ -52,14 +67,18 @@ interface ListDetail {
             name: string;
         };
     };
-    _count: {
-        companies: number;
-    };
     createdAt: string;
     updatedAt: string;
 }
 
 type CompletenessStatus = "INCOMPLETE" | "PARTIAL" | "ACTIONABLE";
+
+interface LatestAction {
+    id: string;
+    result: string;
+    channel: string;
+    createdAt: string;
+}
 
 interface Company {
     id: string;
@@ -70,8 +89,8 @@ interface Company {
     phone: string | null;
     size: string | null;
     status: CompletenessStatus;
-    // JSON blob storing any custom fields imported from CSV
     customData?: Record<string, any> | null;
+    actions?: LatestAction[];
     _count: {
         contacts: number;
     };
@@ -89,6 +108,7 @@ interface Contact {
     status: CompletenessStatus;
     companyId: string;
     companyName?: string;
+    actions?: LatestAction[];
 }
 
 interface ClientInterlocuteur {
@@ -102,97 +122,71 @@ interface ClientInterlocuteur {
     isActive: boolean;
 }
 
-// ============================================
-// STATUS CONFIG
-// ============================================
-// One dot + one word. The previous icon + tinted pill + colored label spent
-// three visual signals on a single fact, in every row of the table.
+interface FlatContactRecord {
+    contact: Contact;
+    company: Company;
+}
 
-const STATUS_CONFIG: Record<CompletenessStatus, { label: string; dot: string; text: string }> = {
-    INCOMPLETE: { label: "Incomplet", dot: "bg-[var(--elan-danger)]", text: "text-ink-soft" },
-    PARTIAL: { label: "Partiel", dot: "bg-[var(--elan-amber)]", text: "text-ink-soft" },
-    ACTIONABLE: { label: "Actionnable", dot: "bg-[var(--elan-success)]", text: "text-ink-soft" },
+type ViewMode = "table" | "cards" | "contacts";
+type SortOption = "name-asc" | "name-desc" | "contacts-desc" | "recent-desc" | "industry-asc";
+
+// Action status formatting dictionary
+const ACTION_RESULT_MAP: Record<string, { label: string; bg: string; text: string; dot: string }> = {
+    MEETING_BOOKED: { label: "RDV confirmé", bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", dot: "bg-emerald-500" },
+    CALLBACK_REQUESTED: { label: "Rappel demandé", bg: "bg-sky-50 border-sky-200", text: "text-sky-700", dot: "bg-sky-500" },
+    INTERESTED: { label: "Intéressé", bg: "bg-indigo-50 border-indigo-200", text: "text-indigo-700", dot: "bg-indigo-500" },
+    NO_RESPONSE: { label: "Sans réponse", bg: "bg-amber-50 border-amber-200", text: "text-amber-700", dot: "bg-amber-500" },
+    VOICEMAIL: { label: "Messagerie", bg: "bg-slate-100 border-slate-200", text: "text-slate-700", dot: "bg-slate-400" },
+    DISQUALIFIED: { label: "Disqualifié", bg: "bg-rose-50 border-rose-200", text: "text-rose-700", dot: "bg-rose-500" },
+    NOT_INTERESTED: { label: "Non intéressé", bg: "bg-slate-100 border-slate-200", text: "text-slate-600", dot: "bg-slate-400" },
+    MEETING_CANCELLED: { label: "RDV annulé", bg: "bg-red-50 border-red-200", text: "text-red-700", dot: "bg-red-500" },
+    BAD_CONTACT: { label: "Numéro KO", bg: "bg-rose-50 border-rose-200", text: "text-rose-700", dot: "bg-rose-500" },
+    WRONG_NUMBER: { label: "Faux numéro", bg: "bg-rose-50 border-rose-200", text: "text-rose-700", dot: "bg-rose-500" },
 };
 
-const STATUS_ORDER: CompletenessStatus[] = ["ACTIONABLE", "PARTIAL", "INCOMPLETE"];
+// Deterministic gradient generator for company badges
+const GRADIENT_PALETTES = [
+    "from-emerald-500 to-teal-600 text-white",
+    "from-blue-500 to-indigo-600 text-white",
+    "from-violet-500 to-purple-600 text-white",
+    "from-amber-500 to-orange-600 text-white",
+    "from-teal-500 to-cyan-600 text-white",
+    "from-sky-500 to-blue-600 text-white",
+    "from-rose-500 to-pink-600 text-white",
+    "from-slate-700 to-slate-900 text-white",
+];
 
-function StatusCell({ status }: { status: CompletenessStatus }) {
-    const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.INCOMPLETE;
-    return (
-        <span className="inline-flex items-center gap-2 whitespace-nowrap">
-            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${config.dot}`} />
-            <span className={`text-xs ${config.text}`}>{config.label}</span>
-        </span>
-    );
+function getCompanyGradient(name: string): string {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const idx = Math.abs(hash) % GRADIENT_PALETTES.length;
+    return GRADIENT_PALETTES[idx];
+}
+
+function cleanWebsiteUrl(url: string | null | undefined): string {
+    if (!url) return "";
+    return url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/$/, "");
+}
+
+function getInitials(text: string): string {
+    if (!text) return "•";
+    const parts = text.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
 // ============================================
-// FILTER CHIPS
-// ============================================
-// Replaces scanning 15 status badges per page with one click.
-
-type StatusFilter = "ALL" | CompletenessStatus;
-
-function FilterChips({
-    value,
-    onChange,
-    counts,
-    total,
-}: {
-    value: StatusFilter;
-    onChange: (next: StatusFilter) => void;
-    counts: Record<CompletenessStatus, number>;
-    total: number;
-}) {
-    const chips: Array<{ key: StatusFilter; label: string; count: number; dot?: string }> = [
-        { key: "ALL", label: "Tous", count: total },
-        ...STATUS_ORDER.map((status) => ({
-            key: status as StatusFilter,
-            label: STATUS_CONFIG[status].label,
-            count: counts[status],
-            dot: STATUS_CONFIG[status].dot,
-        })),
-    ];
-
-    return (
-        <div className="flex flex-wrap items-center gap-1.5">
-            {chips.map((chip) => {
-                const active = value === chip.key;
-                return (
-                    <button
-                        key={chip.key}
-                        type="button"
-                        onClick={() => onChange(chip.key)}
-                        aria-pressed={active}
-                        className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-elan border text-xs font-medium transition-colors ${
-                            active
-                                ? "border-amber bg-eucalyptus text-ink"
-                                : "border-line bg-surface text-ink-soft hover:border-line-strong"
-                        }`}
-                    >
-                        {chip.dot && <span className={`w-1.5 h-1.5 rounded-full ${chip.dot}`} />}
-                        {chip.label}
-                        <span className="text-slate tabular-nums">{chip.count}</span>
-                    </button>
-                );
-            })}
-        </div>
-    );
-}
-
-// ============================================
-// LIST DETAIL PAGE
+// MAIN PAGE COMPONENT
 // ============================================
 
 export default function ListDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { data: session } = useSession();
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { success, error: showError } = useToast();
+    const { success: showSuccess, error: showError } = useToast();
 
-    // Everything under /manager is MANAGER-only (see middleware.ts), so this page
-    // never renders for another role. It is still forwarded to the drawers, which
-    // are shared with the SDR surface and do gate on it.
     const isManager = session?.user?.role === "MANAGER";
 
     const [listId, setListId] = useState<string>("");
@@ -202,8 +196,29 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const [view, setView] = useState<"companies" | "contacts">("companies");
-    const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+
+    // View & Filter states
+    const [viewMode, setViewMode] = useState<ViewMode>("table");
+    const [search, setSearch] = useState("");
+    const [selectedIndustry, setSelectedIndustry] = useState<string>("all");
+    const [selectedCountry, setSelectedCountry] = useState<string>("all");
+    const [selectedSize, setSelectedSize] = useState<string>("all");
+    const [hasPhoneOnly, setHasPhoneOnly] = useState<boolean>(false);
+    const [hasEmailOnly, setHasEmailOnly] = useState<boolean>(false);
+    const [hasLinkedinOnly, setHasLinkedinOnly] = useState<boolean>(false);
+    const [hasActionOnly, setHasActionOnly] = useState<boolean>(false);
+    const [smartFilter, setSmartFilter] = useState<QuickFilterKey>("all");
+    const [sortBy, setSortBy] = useState<SortOption>("name-asc");
+
+    // Pagination
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(25);
+
+    // Clipboard feedback tracker
+    const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+    // Search input ref
+    const searchInputRef = useRef<HTMLInputElement>(null);
 
     // Drawer states
     const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
@@ -216,15 +231,12 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
     const [clientBookingUrl, setClientBookingUrl] = useState("");
     const [clientInterlocuteurs, setClientInterlocuteurs] = useState<ClientInterlocuteur[]>([]);
 
-    const hasAppliedUrlDrawers = useRef(false);
-
-    // Resolve params
     useEffect(() => {
         params.then((p) => setListId(p.id));
     }, [params]);
 
     // ============================================
-    // FETCH LIST
+    // FETCH LIST DATA
     // ============================================
 
     const fetchList = useCallback(
@@ -248,132 +260,398 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
                 } else {
                     showError("Erreur", listJson.error || "Liste non trouvée");
                     router.push("/manager/lists");
+                    return;
                 }
 
                 if (companiesJson.success) {
                     setCompanies(companiesJson.data);
                 }
             } catch (err) {
-                console.error("Failed to fetch list:", err);
-                showError("Erreur", "Impossible de charger la liste");
+                showError("Erreur", "Impossible de charger les données de la liste");
             } finally {
                 setIsLoading(false);
                 setIsRefreshing(false);
             }
         },
-        // showError/router are stable in practice; listId is the real dependency.
-        [listId] // eslint-disable-line react-hooks/exhaustive-deps
+        [listId, router, showError]
     );
 
     useEffect(() => {
-        if (listId) {
-            fetchList();
-        }
+        if (listId) fetchList();
     }, [listId, fetchList]);
 
-    // A row action can change counts; refresh without flashing the skeleton.
-    const refreshQuietly = useCallback(() => fetchList({ silent: true }), [fetchList]);
+    const refreshQuietly = useCallback(() => {
+        fetchList({ silent: true });
+    }, [fetchList]);
 
+    // Fetch interlocuteurs & booking URL for UnifiedActionDrawer
     useEffect(() => {
-        const missionId = list?.mission?.id;
-        if (!missionId) return;
-        let mounted = true;
-        (async () => {
-            try {
-                const res = await fetch(`/api/missions/${missionId}/client-booking`);
-                const json = await res.json();
-                if (!mounted || !json?.success) return;
-                setClientBookingUrl(json.data?.bookingUrl ?? "");
-                setClientInterlocuteurs(Array.isArray(json.data?.interlocuteurs) ? json.data.interlocuteurs : []);
-            } catch {
-                if (!mounted) return;
-                setClientBookingUrl("");
-                setClientInterlocuteurs([]);
-            }
-        })();
-        return () => {
-            mounted = false;
-        };
+        if (!list?.mission?.id) return;
+        fetch(`/api/missions/${list.mission.id}/settings`)
+            .then((r) => r.json())
+            .then((res) => {
+                if (res.success && res.data) {
+                    if (res.data.bookingUrl) setClientBookingUrl(res.data.bookingUrl);
+                    if (res.data.interlocuteurs) setClientInterlocuteurs(res.data.interlocuteurs);
+                }
+            })
+            .catch(() => {});
     }, [list?.mission?.id]);
 
+    // Keyboard shortcut to focus search with "/" or "Ctrl/Cmd+K"
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (
+                (e.key === "/" &&
+                    (e.target as HTMLElement).tagName !== "INPUT" &&
+                    (e.target as HTMLElement).tagName !== "TEXTAREA") ||
+                ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k")
+            ) {
+                e.preventDefault();
+                searchInputRef.current?.focus();
+            } else if (e.key === "Escape" && search) {
+                setSearch("");
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [search]);
+
+    // Copy to clipboard helper
+    const handleCopy = (text: string, key: string, label: string) => {
+        navigator.clipboard.writeText(text);
+        setCopiedKey(key);
+        showSuccess("Copié !", `${label} : ${text}`);
+        setTimeout(() => setCopiedKey(null), 2000);
+    };
+
     // ============================================
-    // DERIVED DATA
+    // DERIVED STATS & FILTERS
     // ============================================
-    // All of these walk every company (and every contact). Memoized so typing in
-    // the table's search box doesn't re-flatten the whole list on each keystroke.
 
-    const allContacts = useMemo<(Contact & { companyName: string })[]>(
-        () =>
-            companies.flatMap((company) =>
-                company.contacts.map((contact) => ({
-                    ...contact,
-                    companyId: company.id,
-                    companyName: company.name,
-                }))
-            ),
-        [companies]
-    );
+    // Global Statistics / Executive KPI Cards
+    const stats = useMemo(() => {
+        const totalCompanies = companies.length;
+        let totalContacts = 0;
+        let withPhone = 0;
+        let withEmail = 0;
+        let withLinkedin = 0;
+        let withActions = 0;
 
-    const totalContacts = useMemo(
-        () => companies.reduce((acc, c) => acc + c._count.contacts, 0),
-        [companies]
-    );
+        companies.forEach((c) => {
+            totalContacts += c.contacts.length;
+            const companyHasPhone = !!c.phone || c.contacts.some((ct) => !!ct.phone);
+            if (companyHasPhone) withPhone++;
+            if (c.contacts.some((ct) => !!ct.email)) withEmail++;
+            if (c.contacts.some((ct) => !!ct.linkedin)) withLinkedin++;
+            if (c.actions && c.actions.length > 0) withActions++;
+        });
 
-    const companyStatusCounts = useMemo(() => {
-        const counts: Record<CompletenessStatus, number> = { INCOMPLETE: 0, PARTIAL: 0, ACTIONABLE: 0 };
-        for (const company of companies) {
-            if (counts[company.status] !== undefined) counts[company.status] += 1;
-        }
-        return counts;
+        const phoneCoverage = totalCompanies > 0 ? Math.round((withPhone / totalCompanies) * 100) : 0;
+        const emailCoverage = totalCompanies > 0 ? Math.round((withEmail / totalCompanies) * 100) : 0;
+        const linkedinCoverage = totalCompanies > 0 ? Math.round((withLinkedin / totalCompanies) * 100) : 0;
+
+        return {
+            totalCompanies,
+            totalContacts,
+            withPhone,
+            withEmail,
+            withLinkedin,
+            withActions,
+            phoneCoverage,
+            emailCoverage,
+            linkedinCoverage,
+        };
     }, [companies]);
 
-    const contactStatusCounts = useMemo(() => {
-        const counts: Record<CompletenessStatus, number> = { INCOMPLETE: 0, PARTIAL: 0, ACTIONABLE: 0 };
-        for (const contact of allContacts) {
-            if (counts[contact.status] !== undefined) counts[contact.status] += 1;
-        }
-        return counts;
-    }, [allContacts]);
+    // Dynamic filter options
+    const filterOptions = useMemo(() => {
+        const industriesMap = new Map<string, number>();
+        const countriesMap = new Map<string, number>();
+        const sizesMap = new Map<string, number>();
 
-    const visibleCompanies = useMemo(
-        () => (statusFilter === "ALL" ? companies : companies.filter((c) => c.status === statusFilter)),
-        [companies, statusFilter]
-    );
+        companies.forEach((c) => {
+            if (c.industry) {
+                industriesMap.set(c.industry, (industriesMap.get(c.industry) || 0) + 1);
+            }
+            if (c.country) {
+                countriesMap.set(c.country, (countriesMap.get(c.country) || 0) + 1);
+            }
+            if (c.size) {
+                sizesMap.set(c.size, (sizesMap.get(c.size) || 0) + 1);
+            }
+        });
 
-    const visibleContacts = useMemo(
-        () => (statusFilter === "ALL" ? allContacts : allContacts.filter((c) => c.status === statusFilter)),
-        [allContacts, statusFilter]
-    );
+        return {
+            industries: Array.from(industriesMap.entries()).sort((a, b) => b[1] - a[1]),
+            countries: Array.from(countriesMap.entries()).sort((a, b) => b[1] - a[1]),
+            sizes: Array.from(sizesMap.entries()).sort((a, b) => b[1] - a[1]),
+        };
+    }, [companies]);
 
-    // Discover all custom field keys present in this list's companies
-    const customCompanyFieldKeys = useMemo(
-        () =>
-            Array.from(
-                new Set(
-                    companies.flatMap((company) =>
-                        company.customData ? Object.keys(company.customData) : []
-                    )
-                )
-            ),
-        [companies]
-    );
+    // Filtered & Sorted Companies
+    const filteredCompanies = useMemo(() => {
+        const query = search.trim().toLowerCase();
 
-    // Open contact + company drawers from URL (e.g. from global search)
+        return companies
+            .filter((c) => {
+                // Search query
+                if (query) {
+                    const haystack = [
+                        c.name,
+                        c.industry,
+                        c.country,
+                        c.size,
+                        c.website,
+                        c.phone,
+                        ...c.contacts.flatMap((ct) => [
+                            ct.firstName,
+                            ct.lastName,
+                            ct.title,
+                            ct.email,
+                            ct.phone,
+                        ]),
+                    ]
+                        .filter(Boolean)
+                        .join(" ")
+                        .toLowerCase();
+
+                    if (!haystack.includes(query)) return false;
+                }
+
+                // Dropdowns
+                if (selectedIndustry !== "all" && c.industry !== selectedIndustry) return false;
+                if (selectedCountry !== "all" && c.country !== selectedCountry) return false;
+                if (selectedSize !== "all" && c.size !== selectedSize) return false;
+
+                // Toggles
+                if (hasPhoneOnly && !c.phone && !c.contacts.some((ct) => !!ct.phone)) return false;
+                if (hasEmailOnly && !c.contacts.some((ct) => !!ct.email)) return false;
+                if (hasLinkedinOnly && !c.contacts.some((ct) => !!ct.linkedin)) return false;
+                if (hasActionOnly && (!c.actions || c.actions.length === 0)) return false;
+
+                // Smart Queue Filters from Health Panel
+                if (smartFilter === "virgin") {
+                    if (c.actions && c.actions.length > 0) return false;
+                } else if (smartFilter === "prospected") {
+                    if (!c.actions || c.actions.length === 0) return false;
+                } else if (smartFilter === "callbacks") {
+                    const lastResult = c.actions?.[0]?.result;
+                    if (
+                        lastResult !== "CALLBACK_REQUESTED" &&
+                        lastResult !== "INTERESTED" &&
+                        lastResult !== "MEETING_BOOKED"
+                    ) {
+                        return false;
+                    }
+                } else if (smartFilter === "bad_contacts") {
+                    const lastResult = c.actions?.[0]?.result;
+                    const isBadAction = lastResult === "BAD_CONTACT" || lastResult === "WRONG_NUMBER";
+                    const isMissingPhone = !c.phone && !c.contacts.some((ct) => !!ct.phone);
+                    if (!isBadAction && !isMissingPhone && c.status !== "INCOMPLETE") return false;
+                }
+
+                return true;
+            })
+            .sort((a, b) => {
+                switch (sortBy) {
+                    case "name-asc":
+                        return a.name.localeCompare(b.name, "fr", { sensitivity: "base" });
+                    case "name-desc":
+                        return b.name.localeCompare(a.name, "fr", { sensitivity: "base" });
+                    case "contacts-desc":
+                        return b.contacts.length - a.contacts.length;
+                    case "industry-asc":
+                        return (a.industry || "").localeCompare(b.industry || "", "fr", { sensitivity: "base" });
+                    default:
+                        return 0;
+                }
+            });
+    }, [
+        companies,
+        search,
+        selectedIndustry,
+        selectedCountry,
+        selectedSize,
+        hasPhoneOnly,
+        hasEmailOnly,
+        hasLinkedinOnly,
+        hasActionOnly,
+        smartFilter,
+        sortBy,
+    ]);
+
+    // Flattened decision-maker contacts for "contacts" directory view
+    const flatContacts = useMemo<FlatContactRecord[]>(() => {
+        const list: FlatContactRecord[] = [];
+        filteredCompanies.forEach((company) => {
+            company.contacts.forEach((contact) => {
+                list.push({ contact, company });
+            });
+        });
+        return list;
+    }, [filteredCompanies]);
+
+    // Reset pagination when filter changes
     useEffect(() => {
-        const contactId = searchParams.get("contactId");
-        const companyId = searchParams.get("companyId");
-        if (!contactId || !companyId || isLoading || !list || hasAppliedUrlDrawers.current || companies.length === 0) return;
-        const contact = allContacts.find((c) => c.id === contactId);
-        const company = companies.find((c) => c.id === companyId);
-        if (contact && company) {
-            hasAppliedUrlDrawers.current = true;
-            setSelectedCompany(company);
-            setSelectedContact(contact);
-            setShowCompanyDrawer(true);
-            setShowContactDrawer(true);
-            router.replace(`/manager/lists/${listId}`, { scroll: false });
+        setPage(1);
+    }, [
+        search,
+        selectedIndustry,
+        selectedCountry,
+        selectedSize,
+        hasPhoneOnly,
+        hasEmailOnly,
+        hasLinkedinOnly,
+        hasActionOnly,
+        smartFilter,
+        sortBy,
+        viewMode,
+    ]);
+
+    // Active filters count
+    const activeFiltersCount = useMemo(() => {
+        let count = 0;
+        if (selectedIndustry !== "all") count++;
+        if (selectedCountry !== "all") count++;
+        if (selectedSize !== "all") count++;
+        if (hasPhoneOnly) count++;
+        if (hasEmailOnly) count++;
+        if (hasLinkedinOnly) count++;
+        if (hasActionOnly) count++;
+        if (smartFilter !== "all") count++;
+        return count;
+    }, [
+        selectedIndustry,
+        selectedCountry,
+        selectedSize,
+        hasPhoneOnly,
+        hasEmailOnly,
+        hasLinkedinOnly,
+        hasActionOnly,
+        smartFilter,
+    ]);
+
+    const resetAllFilters = () => {
+        setSearch("");
+        setSelectedIndustry("all");
+        setSelectedCountry("all");
+        setSelectedSize("all");
+        setHasPhoneOnly(false);
+        setHasEmailOnly(false);
+        setHasLinkedinOnly(false);
+        setHasActionOnly(false);
+        setSmartFilter("all");
+        setSortBy("name-asc");
+    };
+
+    // Paginated subsets
+    const totalItems = viewMode === "contacts" ? flatContacts.length : filteredCompanies.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+
+    const paginatedCompanies = useMemo(() => {
+        const start = (page - 1) * pageSize;
+        return filteredCompanies.slice(start, start + pageSize);
+    }, [filteredCompanies, page, pageSize]);
+
+    const paginatedContacts = useMemo(() => {
+        const start = (page - 1) * pageSize;
+        return flatContacts.slice(start, start + pageSize);
+    }, [flatContacts, page, pageSize]);
+
+    // CSV Export Handler
+    const handleExportCSV = () => {
+        if (!list || filteredCompanies.length === 0) {
+            showError("Export", "Aucune donnée à exporter.");
+            return;
         }
-    }, [searchParams, isLoading, list, companies, allContacts, listId, router]);
+
+        const headers = [
+            "Entreprise",
+            "Site Web",
+            "Standard",
+            "Secteur",
+            "Taille",
+            "Pays",
+            "Statut Données",
+            "Prénom Contact",
+            "Nom Contact",
+            "Poste",
+            "Email Direct",
+            "Téléphone Direct",
+            "LinkedIn",
+            "Dernière Action",
+        ];
+
+        const rows: string[][] = [];
+
+        filteredCompanies.forEach((c) => {
+            const lastAction = c.actions && c.actions[0]
+                ? ACTION_RESULT_MAP[c.actions[0].result]?.label || c.actions[0].result
+                : "Non contacté";
+
+            if (c.contacts.length === 0) {
+                rows.push([
+                    c.name || "",
+                    c.website || "",
+                    c.phone || "",
+                    c.industry || "",
+                    c.size || "",
+                    c.country || "",
+                    c.status,
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    lastAction,
+                ]);
+            } else {
+                c.contacts.forEach((ct) => {
+                    rows.push([
+                        c.name || "",
+                        c.website || "",
+                        c.phone || "",
+                        c.industry || "",
+                        c.size || "",
+                        c.country || "",
+                        c.status,
+                        ct.firstName || "",
+                        ct.lastName || "",
+                        ct.title || "",
+                        ct.email || "",
+                        ct.phone || "",
+                        ct.linkedin || "",
+                        lastAction,
+                    ]);
+                });
+            }
+        });
+
+        const csvContent =
+            "\uFEFF" +
+            headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(";") +
+            "\n" +
+            rows
+                .map((row) =>
+                    row
+                        .map((cell) => `"${(cell || "").toString().replace(/"/g, '""')}"`)
+                        .join(";")
+                )
+                .join("\n");
+
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `liste_${list.name.replace(/[^a-zA-Z0-9]/g, "_")}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        showSuccess("Export CSV", `${rows.length} lignes exportées.`);
+    };
 
     // ============================================
     // DRAWER HANDLERS
@@ -383,8 +661,13 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
         setUnifiedDrawerTarget({ contactId: null, companyId: company.id });
     };
 
-    const handleContactClick = (contact: Contact & { companyName: string }) => {
+    const handleContactClick = (contact: Contact) => {
         setUnifiedDrawerTarget({ contactId: contact.id, companyId: contact.companyId });
+    };
+
+    const handleCompanyContactClick = (contact: Contact) => {
+        setSelectedContact({ ...contact, companyName: selectedCompany?.name || "" });
+        setShowContactDrawer(true);
     };
 
     const handleCompanyUpdate = (updatedCompany: Company) => {
@@ -392,10 +675,7 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
             prev.map((c) => (c.id === updatedCompany.id ? { ...c, ...updatedCompany } : c))
         );
         setSelectedCompany((prev) => (prev?.id === updatedCompany.id ? { ...prev, ...updatedCompany } : prev));
-        // Refresh list to update counts if needed
-        if (updatedCompany._count.contacts !== selectedCompany?._count.contacts) {
-            refreshQuietly();
-        }
+        refreshQuietly();
     };
 
     const handleCompanyCreate = (newCompany: Company) => {
@@ -404,7 +684,6 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
     };
 
     const handleContactCreate = (newContact: Contact & { companyName: string }) => {
-        // Find company and add contact
         setCompanies((prev) =>
             prev.map((company) => {
                 if (company.id === newContact.companyId) {
@@ -423,7 +702,6 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
     };
 
     const handleContactUpdate = (updatedContact: Contact) => {
-        // Update in companies list (nested)
         setCompanies((prev) =>
             prev.map((company) => {
                 if (company.id === updatedContact.companyId) {
@@ -437,289 +715,50 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
                 return company;
             })
         );
-
-        // Update selected contact if open
-        if (selectedContact?.id === updatedContact.id) {
-            setSelectedContact({
-                ...updatedContact,
-                companyName: selectedContact.companyName,
-            });
-        }
-
-        // Update selected company's contacts if open
-        if (selectedCompany && selectedCompany.id === updatedContact.companyId) {
-            setSelectedCompany((prev) => {
-                if (!prev) return null;
-                return {
-                    ...prev,
-                    contacts: prev.contacts.map((c) => (c.id === updatedContact.id ? updatedContact : c)),
-                };
-            });
-        }
+        refreshQuietly();
     };
-
-    // Handle contact click from inside CompanyDrawer
-    const handleCompanyContactClick = (contact: Contact) => {
-        if (!selectedCompany) return;
-
-        setSelectedContact({
-            ...contact,
-            companyName: selectedCompany.name,
-            companyId: selectedCompany.id,
-        });
-        setShowCompanyDrawer(false);
-        setTimeout(() => setShowContactDrawer(true), 100);
-    };
-
-    // ============================================
-    // LIST ACTIONS
-    // ============================================
 
     const handleDelete = async () => {
         if (!list) return;
-
         setIsDeleting(true);
         try {
-            const res = await fetch(`/api/lists/${list.id}`, {
-                method: "DELETE",
-            });
-
+            const res = await fetch(`/api/lists/${list.id}`, { method: "DELETE" });
             const json = await res.json();
-
             if (json.success) {
-                success("Liste supprimée", `${list.name} a été supprimée`);
+                showSuccess("Liste supprimée", "La liste a été supprimée avec succès");
                 router.push("/manager/lists");
             } else {
-                showError("Erreur", json.error);
+                showError("Erreur", json.error || "Impossible de supprimer la liste");
             }
         } catch {
-            showError("Erreur", "Impossible de supprimer la liste");
+            showError("Erreur", "Une erreur est survenue lors de la suppression");
         } finally {
             setIsDeleting(false);
             setShowDeleteModal(false);
         }
     };
 
-    const handleExport = () => {
-        if (!list) return;
-        window.location.href = `/api/lists/${list.id}/export`;
-    };
-
-    const formatCustomFieldLabel = (key: string) => {
-        // Convert snake_case / camelCase to "Title Case"
-        const withSpaces = key
-            .replace(/_/g, " ")
-            .replace(/([a-z])([A-Z])/g, "$1 $2");
-        return withSpaces
-            .split(" ")
-            .filter(Boolean)
-            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(" ");
-    };
-
     // ============================================
-    // COMPANY TABLE COLUMNS
-    // ============================================
-    // Four primary columns. Industrie/Pays and every imported CSV field are
-    // secondary — reachable from the "+N colonnes" menu, not shown by default.
-
-    const companyColumns = useMemo<Column<Company>[]>(
-        () => [
-            {
-                key: "name",
-                header: "Société",
-                sortable: true,
-                render: (_, company) => (
-                    <div className="min-w-0">
-                        <p className="font-medium text-ink truncate">{company.name}</p>
-                        {company.website && (
-                            <a
-                                href={company.website.startsWith("http") ? company.website : `https://${company.website}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-xs text-amber hover:underline truncate block"
-                            >
-                                {company.website}
-                            </a>
-                        )}
-                    </div>
-                ),
-            },
-            {
-                key: "contacts",
-                header: "Contacts",
-                render: (_, company) => (
-                    <span className="text-ink-soft tabular-nums">{company._count.contacts}</span>
-                ),
-            },
-            {
-                key: "phone",
-                header: "Téléphone",
-                sortable: true,
-                render: (value) =>
-                    value ? (
-                        <a
-                            href={`tel:${value}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-ink-soft text-sm hover:text-amber"
-                        >
-                            {value}
-                        </a>
-                    ) : (
-                        <span className="text-slate">—</span>
-                    ),
-            },
-            {
-                key: "status",
-                header: "Statut",
-                render: (value) => <StatusCell status={value as CompletenessStatus} />,
-            },
-            {
-                key: "industry",
-                header: "Industrie",
-                sortable: true,
-                importance: "secondary",
-                render: (value) => <span className="text-ink-soft">{value || "—"}</span>,
-            },
-            {
-                key: "country",
-                header: "Pays",
-                sortable: true,
-                importance: "secondary",
-                render: (value) => <span className="text-ink-soft">{value || "—"}</span>,
-            },
-        ],
-        []
-    );
-
-    // Dynamically build columns for any custom company fields imported from CSV
-    const customCompanyColumns = useMemo<Column<Company>[]>(
-        () =>
-            customCompanyFieldKeys.map((fieldKey) => ({
-                key: `custom_${fieldKey}`,
-                header: formatCustomFieldLabel(fieldKey),
-                sortable: false,
-                importance: "secondary",
-                render: (_, company) => {
-                    const value = company.customData ? company.customData[fieldKey] : undefined;
-                    if (value === null || value === undefined || value === "") {
-                        return <span className="text-slate">—</span>;
-                    }
-                    return <span className="text-ink-soft">{String(value)}</span>;
-                },
-            })),
-        [customCompanyFieldKeys]
-    );
-
-    const companyTableColumns = useMemo(
-        () => [...companyColumns, ...customCompanyColumns],
-        [companyColumns, customCompanyColumns]
-    );
-
-    // ============================================
-    // CONTACT TABLE COLUMNS
-    // ============================================
-
-    const contactColumns = useMemo<Column<Contact & { companyName: string }>[]>(
-        () => [
-            {
-                key: "firstName",
-                header: "Contact",
-                sortable: true,
-                render: (_, contact) => (
-                    <div className="min-w-0">
-                        <p className="font-medium text-ink truncate">
-                            {[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "—"}
-                        </p>
-                        {contact.title && (
-                            <p className="text-xs text-slate truncate">{contact.title}</p>
-                        )}
-                    </div>
-                ),
-            },
-            {
-                key: "companyName",
-                header: "Société",
-                sortable: true,
-                render: (value) => <span className="text-ink-soft truncate">{value}</span>,
-            },
-            {
-                key: "email",
-                header: "Email",
-                render: (value) =>
-                    value ? (
-                        <a
-                            href={`mailto:${value}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-amber hover:underline text-sm"
-                        >
-                            {value}
-                        </a>
-                    ) : (
-                        <span className="text-slate">—</span>
-                    ),
-            },
-            {
-                key: "phone",
-                header: "Téléphone",
-                render: (value) =>
-                    value ? (
-                        <a
-                            href={`tel:${value}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-ink-soft text-sm hover:text-amber"
-                        >
-                            {value}
-                        </a>
-                    ) : (
-                        <span className="text-slate">—</span>
-                    ),
-            },
-            {
-                key: "status",
-                header: "Statut",
-                render: (value) => <StatusCell status={value as CompletenessStatus} />,
-            },
-            {
-                key: "linkedin",
-                header: "LinkedIn",
-                importance: "secondary",
-                render: (value) =>
-                    value ? (
-                        <a
-                            href={value.startsWith("http") ? value : `https://${value}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-amber hover:underline text-sm"
-                        >
-                            Profil
-                        </a>
-                    ) : (
-                        <span className="text-slate">—</span>
-                    ),
-            },
-        ],
-        []
-    );
-
-    // ============================================
-    // LOADING STATE
+    // LOADING SKELETON
     // ============================================
 
     if (isLoading || !list) {
         return (
-            <div className="elan-page space-y-4">
+            <div className="elan-page space-y-6">
                 <div className="flex items-center gap-4">
-                    <div className="w-9 h-9 bg-paper-2 rounded-elan animate-pulse" />
+                    <div className="w-10 h-10 bg-slate-200 rounded-xl animate-pulse" />
                     <div className="space-y-2">
-                        <div className="h-6 w-56 bg-paper-2 rounded animate-pulse" />
-                        <div className="h-3.5 w-40 bg-paper-2 rounded animate-pulse" />
+                        <div className="h-6 w-56 bg-slate-200 rounded animate-pulse" />
+                        <div className="h-3.5 w-40 bg-slate-100 rounded animate-pulse" />
                     </div>
                 </div>
-                <div className="h-14 bg-paper-2 rounded-elan-lg animate-pulse" />
-                <div className="h-96 bg-paper-2 rounded-elan-lg animate-pulse" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                    {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="h-28 bg-slate-100 rounded-2xl animate-pulse" />
+                    ))}
+                </div>
+                <div className="h-20 bg-slate-100 rounded-2xl animate-pulse" />
+                <div className="h-96 bg-slate-100 rounded-2xl animate-pulse" />
             </div>
         );
     }
@@ -728,7 +767,7 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
         {
             label: "Exporter en CSV",
             icon: <Download className="w-4 h-4" />,
-            onClick: handleExport,
+            onClick: handleExportCSV,
         },
         {
             label: "Modifier la liste",
@@ -737,7 +776,7 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
         },
         {
             label: isRefreshing ? "Actualisation…" : "Actualiser",
-            icon: <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />,
+            icon: <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin text-emerald-600" : ""}`} />,
             onClick: refreshQuietly,
             disabled: isRefreshing,
         },
@@ -750,41 +789,34 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
         },
     ];
 
-    const isCompaniesView = view === "companies";
-    const activeCounts = isCompaniesView ? companyStatusCounts : contactStatusCounts;
-    const activeTotal = isCompaniesView ? companies.length : allContacts.length;
-
     return (
-        <div className="elan-page space-y-4">
-            {/* ── 1. Identity row ─────────────────────────────────────────────
-                Who am I looking at, how do I get back, what can I do to it.
-                Destructive and rare actions live behind the ⋯ menu so the one
-                primary action is unambiguous. */}
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
+        <div className="elan-page space-y-6">
+            {/* 1. IDENTITY & TOP HEADER ROW */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[var(--elan-line)]">
+                <div className="flex items-center gap-3.5 min-w-0">
                     <Link
                         href="/manager/lists"
                         aria-label="Retour aux listes"
-                        className="flex items-center justify-center w-9 h-9 flex-shrink-0 rounded-elan border border-line bg-surface text-slate hover:text-ink hover:border-line-strong transition-colors"
+                        className="flex items-center justify-center w-10 h-10 flex-shrink-0 rounded-xl border border-[var(--elan-line)] bg-[var(--elan-surface)] text-slate-500 hover:text-slate-900 hover:border-slate-300 transition-colors shadow-xs"
                     >
                         <ArrowLeft className="w-4 h-4" />
                     </Link>
                     <div className="min-w-0">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <h1 className="text-xl font-semibold text-ink tracking-tight truncate">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                            <h1 className="text-xl sm:text-2xl font-bold text-[var(--elan-ink)] tracking-tight truncate">
                                 {list.name}
                             </h1>
-                            <span className="flex-shrink-0 text-[10px] font-medium uppercase tracking-[0.07em] text-slate border border-line rounded px-1.5 py-0.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 bg-slate-100 border border-slate-200 rounded-md px-2 py-0.5">
                                 {list.type}
                             </span>
                         </div>
-                        <p className="text-xs text-slate truncate">
+                        <p className="text-xs text-slate-500 truncate mt-0.5">
                             {list.mission.client.name}
-                            <span className="mx-1.5 text-line-strong">/</span>
+                            <span className="mx-1.5 text-slate-300">/</span>
                             {list.mission.name}
                             {list.source && (
                                 <>
-                                    <span className="mx-1.5 text-line-strong">/</span>
+                                    <span className="mx-1.5 text-slate-300">/</span>
                                     {list.source}
                                 </>
                             )}
@@ -792,167 +824,1082 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Header Actions */}
+                <div className="flex items-center gap-2.5 flex-wrap self-start sm:self-auto">
                     <button
-                        onClick={() => {
-                            if (isCompaniesView) {
-                                setIsCreatingCompany(true);
-                                setSelectedCompany(null);
-                                setShowCompanyDrawer(true);
-                            } else {
-                                setIsCreatingContact(true);
-                                setSelectedContact(null);
-                                setShowContactDrawer(true);
-                            }
-                        }}
-                        disabled={!isCompaniesView && companies.length === 0}
-                        className="mgr-btn-primary inline-flex items-center gap-2 h-9 px-3.5 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        type="button"
+                        onClick={refreshQuietly}
+                        disabled={isRefreshing}
+                        title="Actualiser les données"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 hover:text-slate-900 bg-[var(--elan-surface)] hover:bg-slate-50 border border-[var(--elan-line)] transition-all shadow-xs disabled:opacity-50"
                     >
-                        <Plus className="w-4 h-4" />
-                        {isCompaniesView ? "Société" : "Contact"}
+                        <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-emerald-600" : ""}`} />
+                        <span className="hidden sm:inline">Actualiser</span>
                     </button>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setIsCreatingCompany(true);
+                            setSelectedCompany(null);
+                            setShowCompanyDrawer(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-sm shadow-emerald-500/20 transition-all cursor-pointer"
+                    >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Société</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setIsCreatingContact(true);
+                            setSelectedContact(null);
+                            setShowContactDrawer(true);
+                        }}
+                        disabled={companies.length === 0}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-[var(--elan-line)] shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Contact</span>
+                    </button>
+
                     <DropdownMenu
                         align="right"
                         width={200}
                         items={listActions}
                         trigger={
-                            <span
-                                role="button"
+                            <button
+                                type="button"
                                 aria-label="Actions sur la liste"
-                                className="flex items-center justify-center w-9 h-9 rounded-elan border border-line bg-surface text-slate hover:text-ink hover:border-line-strong transition-colors cursor-pointer"
+                                className="flex items-center justify-center w-9 h-9 rounded-xl border border-[var(--elan-line)] bg-[var(--elan-surface)] text-slate-500 hover:text-slate-900 hover:border-slate-300 transition-colors shadow-xs cursor-pointer"
                             >
                                 <MoreHorizontal className="w-4 h-4" />
-                            </span>
+                            </button>
                         }
                     />
                 </div>
             </div>
 
-            {/* ── 2. Pulse strip ──────────────────────────────────────────────
-                The four stat cards said what the tab labels and the coverage bar
-                already say. One line of counts, then the health summary — the
-                full 40-metric panel is one click away instead of always open. */}
-            <div className="rounded-elan-lg border border-line bg-surface shadow-elan-sm divide-y divide-line">
-                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-                    <span className="text-sm text-ink">
-                        <strong className="font-semibold tabular-nums">{companies.length}</strong>{" "}
-                        <span className="text-slate">sociétés</span>
-                    </span>
-                    <span className="text-sm text-ink">
-                        <strong className="font-semibold tabular-nums">{totalContacts}</strong>{" "}
-                        <span className="text-slate">contacts</span>
-                    </span>
-                    <span className="text-sm text-ink">
-                        <strong className="font-semibold tabular-nums">{companyStatusCounts.ACTIONABLE}</strong>{" "}
-                        <span className="text-slate">sociétés actionnables</span>
-                    </span>
-                    <span className="text-sm text-ink">
-                        <strong className="font-semibold tabular-nums">
-                            {allContacts.filter((c) => c.email).length}
-                        </strong>{" "}
-                        <span className="text-slate">avec e-mail</span>
-                    </span>
-                </div>
-                <div className="px-4 py-3">
-                    <ProspectionHealthPanel listId={list.id} collapsible defaultExpanded={false} />
-                </div>
-            </div>
-
-            {/* ── 3. Work surface ─────────────────────────────────────────────
-                Everything above this point fits in ~150px, so the first row of
-                real data is visible without scrolling. */}
-            <div className="rounded-elan-lg border border-line bg-surface shadow-elan-sm overflow-hidden">
-                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-line">
-                    <div className="inline-flex items-center p-0.5 bg-paper rounded-elan border border-line">
-                        <button
-                            onClick={() => {
-                                setView("companies");
-                                setStatusFilter("ALL");
-                            }}
-                            className={`inline-flex items-center gap-2 h-8 px-3 rounded-[7px] text-xs font-medium transition-colors ${
-                                isCompaniesView
-                                    ? "bg-surface text-ink shadow-elan-sm"
-                                    : "text-slate hover:text-ink"
-                            }`}
-                        >
-                            <Building2 className="w-3.5 h-3.5" />
-                            Sociétés
-                            <span className="tabular-nums text-slate">{companies.length}</span>
-                        </button>
-                        <button
-                            onClick={() => {
-                                setView("contacts");
-                                setStatusFilter("ALL");
-                            }}
-                            className={`inline-flex items-center gap-2 h-8 px-3 rounded-[7px] text-xs font-medium transition-colors ${
-                                !isCompaniesView
-                                    ? "bg-surface text-ink shadow-elan-sm"
-                                    : "text-slate hover:text-ink"
-                            }`}
-                        >
-                            <Users className="w-3.5 h-3.5" />
-                            Contacts
-                            <span className="tabular-nums text-slate">{totalContacts}</span>
-                        </button>
-                    </div>
-
-                    <FilterChips
-                        value={statusFilter}
-                        onChange={setStatusFilter}
-                        counts={activeCounts}
-                        total={activeTotal}
-                    />
-                </div>
-
-                {activeTotal === 0 ? (
-                    <div className="flex flex-col items-center justify-center text-center py-20 px-6">
-                        <div className="w-12 h-12 rounded-full bg-paper border border-line flex items-center justify-center mb-4">
-                            {isCompaniesView ? (
-                                <Building2 className="w-5 h-5 text-slate" />
-                            ) : (
-                                <Users className="w-5 h-5 text-slate" />
-                            )}
+            {/* 2. EXECUTIVE KPI SUMMARY CARDS */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                {/* 1. Comptes Cibles */}
+                <div className="bg-[var(--elan-surface)] p-4 rounded-2xl border border-[var(--elan-line)] shadow-xs flex flex-col justify-between hover:border-emerald-300/60 transition-all">
+                    <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-slate-500">Comptes Cibles</span>
+                        <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                            <Building2 className="w-4 h-4" />
                         </div>
-                        <h3 className="text-base font-semibold text-ink">
-                            {isCompaniesView ? "Aucune société" : "Aucun contact"}
-                        </h3>
-                        <p className="text-sm text-slate mt-1 max-w-sm">
-                            {isCompaniesView
-                                ? "Cette liste est vide. Importez un fichier ou ajoutez une société pour commencer."
-                                : "Ajoutez un contact depuis une société, ou importez un nouveau fichier."}
+                    </div>
+                    <div className="mt-2">
+                        <div className="text-2xl font-bold text-[var(--elan-ink)] tracking-tight">
+                            {stats.totalCompanies.toLocaleString("fr-FR")}
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                            {filterOptions.industries.length} secteurs d&apos;activité identifiés
                         </p>
                     </div>
-                ) : isCompaniesView ? (
-                    <DataTable
-                        data={visibleCompanies}
-                        columns={companyTableColumns}
-                        keyField="id"
-                        searchable
-                        searchPlaceholder="Rechercher une société (nom, industrie, pays, téléphone)…"
-                        searchFields={["name", "industry", "country", "phone"]}
-                        pagination
-                        pageSize={25}
-                        onRowClick={handleCompanyClick}
-                        enableSecondaryColumnsToggle
-                        emptyMessage="Aucune société ne correspond à ce filtre"
-                    />
-                ) : (
-                    <DataTable
-                        data={visibleContacts}
-                        columns={contactColumns}
-                        keyField="id"
-                        searchable
-                        searchPlaceholder="Rechercher un contact (nom, e-mail, téléphone, société)…"
-                        searchFields={["firstName", "lastName", "email", "phone", "companyName"]}
-                        pagination
-                        pageSize={25}
-                        onRowClick={handleContactClick}
-                        enableSecondaryColumnsToggle
-                        emptyMessage="Aucun contact ne correspond à ce filtre"
-                    />
-                )}
+                    <div className="mt-3 pt-2.5 border-t border-[var(--elan-line)] flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500">Prospectés / actifs</span>
+                        <span className="font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                            {stats.withActions} comptes
+                        </span>
+                    </div>
+                </div>
+
+                {/* 2. Décideurs Qualifiés */}
+                <div className="bg-[var(--elan-surface)] p-4 rounded-2xl border border-[var(--elan-line)] shadow-xs flex flex-col justify-between hover:border-emerald-300/60 transition-all">
+                    <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-slate-500">Décideurs Répertoriés</span>
+                        <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
+                            <Users className="w-4 h-4" />
+                        </div>
+                    </div>
+                    <div className="mt-2">
+                        <div className="text-2xl font-bold text-[var(--elan-ink)] tracking-tight">
+                            {stats.totalContacts.toLocaleString("fr-FR")}
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                            {(stats.totalCompanies > 0 ? (stats.totalContacts / stats.totalCompanies).toFixed(1) : 0)} contacts / compte
+                        </p>
+                    </div>
+                    <div className="mt-3 pt-2.5 border-t border-[var(--elan-line)] flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500">Profils LinkedIn</span>
+                        <span className="font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">
+                            {stats.withLinkedin} ({stats.linkedinCoverage}%)
+                        </span>
+                    </div>
+                </div>
+
+                {/* 3. Couverture Téléphone (Cliquable pour filtrer) */}
+                <div
+                    onClick={() => setHasPhoneOnly(!hasPhoneOnly)}
+                    className={`cursor-pointer bg-[var(--elan-surface)] p-4 rounded-2xl border transition-all ${
+                        hasPhoneOnly
+                            ? "border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm"
+                            : "border-[var(--elan-line)] hover:border-emerald-300/60 shadow-xs"
+                    }`}
+                >
+                    <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-slate-500">Couverture Téléphone</span>
+                        <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                            <Phone className="w-4 h-4" />
+                        </div>
+                    </div>
+                    <div className="mt-2">
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-2xl font-bold text-[var(--elan-ink)] tracking-tight">
+                                {stats.phoneCoverage}%
+                            </span>
+                            <span className="text-xs text-slate-500">
+                                ({stats.withPhone} comptes)
+                            </span>
+                        </div>
+                        <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                            <div
+                                className="bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-full transition-all duration-500"
+                                style={{ width: `${stats.phoneCoverage}%` }}
+                            />
+                        </div>
+                    </div>
+                    <div className="mt-3 pt-2.5 border-t border-[var(--elan-line)] flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500">Standard ou ligne directe</span>
+                        <span className="font-semibold text-emerald-700">
+                            {hasPhoneOnly ? "Filtre actif ✓" : "Filtrer"}
+                        </span>
+                    </div>
+                </div>
+
+                {/* 4. Couverture Email Direct (Cliquable pour filtrer) */}
+                <div
+                    onClick={() => setHasEmailOnly(!hasEmailOnly)}
+                    className={`cursor-pointer bg-[var(--elan-surface)] p-4 rounded-2xl border transition-all ${
+                        hasEmailOnly
+                            ? "border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm"
+                            : "border-[var(--elan-line)] hover:border-emerald-300/60 shadow-xs"
+                    }`}
+                >
+                    <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-slate-500">Emails Directs</span>
+                        <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
+                            <Mail className="w-4 h-4" />
+                        </div>
+                    </div>
+                    <div className="mt-2">
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-2xl font-bold text-[var(--elan-ink)] tracking-tight">
+                                {stats.emailCoverage}%
+                            </span>
+                            <span className="text-xs text-slate-500">
+                                ({stats.withEmail} comptes)
+                            </span>
+                        </div>
+                        <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                            <div
+                                className="bg-gradient-to-r from-sky-500 to-blue-500 h-full rounded-full transition-all duration-500"
+                                style={{ width: `${stats.emailCoverage}%` }}
+                            />
+                        </div>
+                    </div>
+                    <div className="mt-3 pt-2.5 border-t border-[var(--elan-line)] flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500">Décideurs avec email</span>
+                        <span className="font-semibold text-sky-700">
+                            {hasEmailOnly ? "Filtre actif ✓" : "Filtrer"}
+                        </span>
+                    </div>
+                </div>
             </div>
 
+            {/* 3. COCKPIT SANTÉ DE PROSPECTION */}
+            <div className="bg-[var(--elan-surface)] p-4 rounded-2xl border border-[var(--elan-line)] shadow-xs">
+                <ProspectionHealthPanel
+                    listId={list.id}
+                    collapsible
+                    defaultExpanded={false}
+                    onQuickFilter={(key) => setSmartFilter(key)}
+                    activeQuickFilter={smartFilter}
+                />
+            </div>
+
+            {/* 4. COMMAND BAR: SEARCH, FILTERS, VIEW SWITCHER & SORT */}
+            <div className="bg-[var(--elan-surface)] rounded-2xl border border-[var(--elan-line)] p-3.5 shadow-xs space-y-3">
+                <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+                    {/* Search Input */}
+                    <div className="relative flex-1 max-w-xl">
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input
+                            ref={searchInputRef}
+                            type="text"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Rechercher une entreprise, secteur, nom de contact, email, poste..."
+                            className="w-full h-10 pl-10 pr-16 rounded-xl border border-[var(--elan-line)] bg-[var(--elan-paper)] text-xs sm:text-sm text-[var(--elan-ink)] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                        />
+                        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                            {search ? (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearch("")}
+                                    className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-200/60"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            ) : (
+                                <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono text-slate-400 bg-slate-100 border border-slate-200 rounded">
+                                    /
+                                </kbd>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* View Switcher & Sort */}
+                    <div className="flex items-center gap-2.5 justify-between lg:justify-end flex-wrap">
+                        {/* View Switcher Tabs */}
+                        <div className="flex items-center p-1 bg-[var(--elan-paper)] border border-[var(--elan-line)] rounded-xl shadow-xs">
+                            <button
+                                type="button"
+                                onClick={() => setViewMode("table")}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                    viewMode === "table"
+                                        ? "bg-emerald-600 text-white shadow-xs"
+                                        : "text-slate-500 hover:text-slate-900"
+                                }`}
+                            >
+                                <Layers className="w-3.5 h-3.5" />
+                                <span>Tableau</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setViewMode("cards")}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                    viewMode === "cards"
+                                        ? "bg-emerald-600 text-white shadow-xs"
+                                        : "text-slate-500 hover:text-slate-900"
+                                }`}
+                            >
+                                <Building2 className="w-3.5 h-3.5" />
+                                <span>Cartes</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setViewMode("contacts")}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                    viewMode === "contacts"
+                                        ? "bg-emerald-600 text-white shadow-xs"
+                                        : "text-slate-500 hover:text-slate-900"
+                                }`}
+                            >
+                                <Users className="w-3.5 h-3.5" />
+                                <span>Décideurs</span>
+                            </button>
+                        </div>
+
+                        {/* Sort Dropdown */}
+                        <div className="flex items-center gap-1.5">
+                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <select
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value as SortOption)}
+                                className="h-9 px-2.5 rounded-xl border border-[var(--elan-line)] bg-[var(--elan-paper)] text-xs font-semibold text-[var(--elan-ink)] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 cursor-pointer"
+                            >
+                                <option value="name-asc">Nom (A → Z)</option>
+                                <option value="name-desc">Nom (Z → A)</option>
+                                <option value="contacts-desc">Plus de contacts</option>
+                                <option value="industry-asc">Secteur</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Dropdowns & Boolean Filter Chips */}
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[var(--elan-line)]">
+                    {/* Industry Dropdown */}
+                    <select
+                        value={selectedIndustry}
+                        onChange={(e) => setSelectedIndustry(e.target.value)}
+                        className={`h-8 px-2.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${
+                            selectedIndustry !== "all"
+                                ? "border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold"
+                                : "border-[var(--elan-line)] bg-[var(--elan-paper)] text-slate-500 hover:text-slate-900"
+                        }`}
+                    >
+                        <option value="all">Tous les secteurs ({filterOptions.industries.length})</option>
+                        {filterOptions.industries.map(([ind, count]) => (
+                            <option key={ind} value={ind}>
+                                {ind} ({count})
+                            </option>
+                        ))}
+                    </select>
+
+                    {/* Country Dropdown */}
+                    {filterOptions.countries.length > 1 && (
+                        <select
+                            value={selectedCountry}
+                            onChange={(e) => setSelectedCountry(e.target.value)}
+                            className={`h-8 px-2.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${
+                                selectedCountry !== "all"
+                                    ? "border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold"
+                                    : "border-[var(--elan-line)] bg-[var(--elan-paper)] text-slate-500 hover:text-slate-900"
+                            }`}
+                        >
+                            <option value="all">Tous les pays ({filterOptions.countries.length})</option>
+                            {filterOptions.countries.map(([c, count]) => (
+                                <option key={c} value={c}>
+                                    {c} ({count})
+                                </option>
+                            ))}
+                        </select>
+                    )}
+
+                    {/* Size Dropdown */}
+                    {filterOptions.sizes.length > 1 && (
+                        <select
+                            value={selectedSize}
+                            onChange={(e) => setSelectedSize(e.target.value)}
+                            className={`h-8 px-2.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${
+                                selectedSize !== "all"
+                                    ? "border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold"
+                                    : "border-[var(--elan-line)] bg-[var(--elan-paper)] text-slate-500 hover:text-slate-900"
+                            }`}
+                        >
+                            <option value="all">Toutes les tailles</option>
+                            {filterOptions.sizes.map(([s, count]) => (
+                                <option key={s} value={s}>
+                                    {s} ({count})
+                                </option>
+                            ))}
+                        </select>
+                    )}
+
+                    <div className="hidden sm:block h-4 w-px bg-slate-200 mx-1" />
+
+                    {/* Quick Toggles */}
+                    <button
+                        type="button"
+                        onClick={() => setHasPhoneOnly(!hasPhoneOnly)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                            hasPhoneOnly
+                                ? "bg-emerald-600 text-white shadow-xs"
+                                : "bg-[var(--elan-paper)] text-slate-500 hover:text-slate-900 border border-[var(--elan-line)]"
+                        }`}
+                    >
+                        <Phone className="w-3 h-3" />
+                        <span>Téléphone dispo</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setHasEmailOnly(!hasEmailOnly)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                            hasEmailOnly
+                                ? "bg-sky-600 text-white shadow-xs"
+                                : "bg-[var(--elan-paper)] text-slate-500 hover:text-slate-900 border border-[var(--elan-line)]"
+                        }`}
+                    >
+                        <Mail className="w-3 h-3" />
+                        <span>Email direct</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setHasLinkedinOnly(!hasLinkedinOnly)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                            hasLinkedinOnly
+                                ? "bg-blue-600 text-white shadow-xs"
+                                : "bg-[var(--elan-paper)] text-slate-500 hover:text-slate-900 border border-[var(--elan-line)]"
+                        }`}
+                    >
+                        <Linkedin className="w-3 h-3" />
+                        <span>LinkedIn</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setHasActionOnly(!hasActionOnly)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                            hasActionOnly
+                                ? "bg-indigo-600 text-white shadow-xs"
+                                : "bg-[var(--elan-paper)] text-slate-500 hover:text-slate-900 border border-[var(--elan-line)]"
+                        }`}
+                    >
+                        <PhoneCall className="w-3 h-3" />
+                        <span>Déjà prospecté</span>
+                    </button>
+
+                    {/* Reset Button */}
+                    {activeFiltersCount > 0 && (
+                        <button
+                            type="button"
+                            onClick={resetAllFilters}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 transition-all ml-auto cursor-pointer"
+                        >
+                            <X className="w-3 h-3" />
+                            <span>Réinitialiser ({activeFiltersCount})</span>
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* 5. CONTENT AREA: TABLEAU / CARTES / DÉCIDEURS */}
+            {totalItems === 0 ? (
+                /* Empty state */
+                <div className="bg-[var(--elan-surface)] border-2 border-dashed border-[var(--elan-line)] rounded-3xl py-16 px-6 text-center">
+                    <div className="mx-auto mb-4 w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-xs">
+                        <Building2 className="w-7 h-7" />
+                    </div>
+                    <h3 className="text-base font-bold text-[var(--elan-ink)]">
+                        Aucune entreprise ou contact ne correspond aux critères
+                    </h3>
+                    <p className="mt-1.5 text-xs text-slate-500 max-w-sm mx-auto">
+                        Essayez de modifier votre recherche ou de réinitialiser vos filtres.
+                    </p>
+                    {activeFiltersCount > 0 || search ? (
+                        <button
+                            type="button"
+                            onClick={resetAllFilters}
+                            className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm transition-all cursor-pointer"
+                        >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            <span>Effacer tous les filtres</span>
+                        </button>
+                    ) : null}
+                </div>
+            ) : viewMode === "table" ? (
+                /* MODE TABLEAU */
+                <div className="bg-[var(--elan-surface)] rounded-2xl border border-[var(--elan-line)] overflow-hidden shadow-xs">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full text-left border-collapse text-xs">
+                            <thead>
+                                <tr className="bg-[var(--elan-paper)] border-b border-[var(--elan-line)] text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                    <th className="py-3.5 px-4">Entreprise</th>
+                                    <th className="py-3.5 px-4">Secteur & Taille</th>
+                                    <th className="py-3.5 px-4">Standard & Pays</th>
+                                    <th className="py-3.5 px-4">Décideurs Répertoriés</th>
+                                    <th className="py-3.5 px-4">Statut Prospection</th>
+                                    <th className="py-3.5 px-4 text-right">Fiche</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[var(--elan-line)]">
+                                {paginatedCompanies.map((company) => {
+                                    const latestAction = company.actions && company.actions[0];
+                                    const statusCfg = latestAction
+                                        ? ACTION_RESULT_MAP[latestAction.result] || {
+                                              label: latestAction.result,
+                                              bg: "bg-slate-100",
+                                              text: "text-slate-700",
+                                              dot: "bg-slate-400",
+                                          }
+                                        : null;
+
+                                    return (
+                                        <tr
+                                            key={company.id}
+                                            onClick={() => handleCompanyClick(company)}
+                                            className="hover:bg-emerald-50/25 transition-colors cursor-pointer group"
+                                        >
+                                            {/* Entreprise */}
+                                            <td className="py-3.5 px-4 align-middle">
+                                                <div className="flex items-center gap-3">
+                                                    <div
+                                                        className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${getCompanyGradient(
+                                                            company.name
+                                                        )} flex items-center justify-center font-bold text-xs shadow-xs shrink-0`}
+                                                    >
+                                                        {getInitials(company.name)}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <p className="font-bold text-[var(--elan-ink)] text-xs sm:text-sm truncate group-hover:text-emerald-700 transition-colors">
+                                                            {company.name}
+                                                        </p>
+                                                        {company.website ? (
+                                                            <a
+                                                                href={company.website.startsWith("http") ? company.website : `https://${company.website}`}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                className="inline-flex items-center gap-1 text-[11px] text-emerald-600 hover:text-emerald-800 hover:underline transition-colors mt-0.5"
+                                                            >
+                                                                <Globe2 className="w-3 h-3 shrink-0" />
+                                                                <span className="truncate max-w-[160px]">
+                                                                    {cleanWebsiteUrl(company.website)}
+                                                                </span>
+                                                                <ArrowUpRight className="w-2.5 h-2.5 opacity-60" />
+                                                            </a>
+                                                        ) : (
+                                                            <span className="text-[11px] text-slate-400">Site non renseigné</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </td>
+
+                                            {/* Secteur & Taille */}
+                                            <td className="py-3.5 px-4 align-middle">
+                                                <div className="flex flex-col gap-1 max-w-[180px]">
+                                                    {company.industry ? (
+                                                        <span className="inline-flex items-center gap-1 font-medium text-[var(--elan-ink)] truncate">
+                                                            <Briefcase className="w-3 h-3 text-slate-400 shrink-0" />
+                                                            <span className="truncate">{company.industry}</span>
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-slate-400">—</span>
+                                                    )}
+                                                    {company.size && (
+                                                        <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                                                            <Users className="w-3 h-3 text-slate-400" />
+                                                            {company.size}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+
+                                            {/* Standard & Pays */}
+                                            <td className="py-3.5 px-4 align-middle">
+                                                <div className="flex flex-col gap-1 text-[11px]">
+                                                    {company.phone ? (
+                                                        <div className="flex items-center gap-1.5">
+                                                            <a
+                                                                href={`tel:${company.phone}`}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                className="inline-flex items-center gap-1 text-[var(--elan-ink)] hover:text-emerald-700 font-medium"
+                                                            >
+                                                                <Phone className="w-3 h-3 text-emerald-600" />
+                                                                {company.phone}
+                                                            </a>
+                                                            <button
+                                                                type="button"
+                                                                title="Copier le numéro"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleCopy(company.phone!, `phone-${company.id}`, "Standard");
+                                                                }}
+                                                                className="text-slate-400 hover:text-slate-700 cursor-pointer p-0.5"
+                                                            >
+                                                                {copiedKey === `phone-${company.id}` ? (
+                                                                    <Check className="w-3 h-3 text-emerald-600" />
+                                                                ) : (
+                                                                    <Copy className="w-3 h-3" />
+                                                                )}
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-slate-400">Standard non renseigné</span>
+                                                    )}
+                                                    {company.country && (
+                                                        <span className="inline-flex items-center gap-1 text-slate-500">
+                                                            <MapPin className="w-3 h-3 text-slate-400" />
+                                                            {company.country}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+
+                                            {/* Décideurs Répertoriés */}
+                                            <td className="py-3.5 px-4 align-middle">
+                                                <div className="flex flex-col gap-1.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                            <Users className="w-3 h-3" />
+                                                            {company.contacts.length} contact{company.contacts.length > 1 ? "s" : ""}
+                                                        </span>
+                                                        {company.contacts.some((c) => !!c.linkedin) && (
+                                                            <span title="Profils LinkedIn disponibles" className="text-blue-600">
+                                                                <Linkedin className="w-3.5 h-3.5" />
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Contact snippets */}
+                                                    {company.contacts.slice(0, 2).map((ct) => {
+                                                        const name = [ct.firstName, ct.lastName].filter(Boolean).join(" ") || "Contact";
+                                                        return (
+                                                            <div
+                                                                key={ct.id}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleContactClick(ct);
+                                                                }}
+                                                                className="text-[11px] flex items-center gap-1.5 text-slate-600 truncate max-w-[200px] hover:text-emerald-700"
+                                                            >
+                                                                <span className="font-semibold text-slate-800 truncate">{name}</span>
+                                                                {ct.title && <span className="text-slate-400 truncate">· {ct.title}</span>}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    {company.contacts.length > 2 && (
+                                                        <span className="text-[10px] font-medium text-slate-400">
+                                                            + {company.contacts.length - 2} autre{company.contacts.length - 2 > 1 ? "s" : ""}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+
+                                            {/* Statut Prospection */}
+                                            <td className="py-3.5 px-4 align-middle">
+                                                {statusCfg ? (
+                                                    <span
+                                                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${statusCfg.bg} ${statusCfg.text}`}
+                                                    >
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dot}`} />
+                                                        {statusCfg.label}
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] text-slate-400 bg-slate-100">
+                                                        Non contacté
+                                                    </span>
+                                                )}
+                                            </td>
+
+                                            {/* Fiche action */}
+                                            <td className="py-3.5 px-4 align-middle text-right">
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleCompanyClick(company);
+                                                    }}
+                                                    className="inline-flex items-center gap-1 p-2 rounded-xl text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 transition-all cursor-pointer"
+                                                    title="Ouvrir la fiche d'action"
+                                                >
+                                                    <ChevronRight className="w-4 h-4" />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            ) : viewMode === "cards" ? (
+                /* MODE CARTES */
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {paginatedCompanies.map((company) => {
+                        const latestAction = company.actions && company.actions[0];
+                        const statusCfg = latestAction
+                            ? ACTION_RESULT_MAP[latestAction.result] || {
+                                  label: latestAction.result,
+                                  bg: "bg-slate-100",
+                                  text: "text-slate-700",
+                                  dot: "bg-slate-400",
+                              }
+                            : null;
+
+                        return (
+                            <div
+                                key={company.id}
+                                className="bg-[var(--elan-surface)] rounded-2xl border border-[var(--elan-line)] p-4 flex flex-col justify-between gap-4 hover:border-emerald-300 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-200 group"
+                            >
+                                <div className="space-y-3">
+                                    {/* Card Header */}
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-start gap-3 min-w-0">
+                                            <div
+                                                className={`w-11 h-11 rounded-2xl bg-gradient-to-tr ${getCompanyGradient(
+                                                    company.name
+                                                )} flex items-center justify-center font-bold text-sm shadow-xs shrink-0`}
+                                            >
+                                                {getInitials(company.name)}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h3
+                                                    onClick={() => handleCompanyClick(company)}
+                                                    className="font-bold text-sm sm:text-base text-[var(--elan-ink)] truncate cursor-pointer hover:text-emerald-700 transition-colors"
+                                                >
+                                                    {company.name}
+                                                </h3>
+                                                <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-xs text-slate-500">
+                                                    {company.industry && (
+                                                        <span className="font-medium text-slate-700">{company.industry}</span>
+                                                    )}
+                                                    {company.size && <span>· {company.size}</span>}
+                                                    {company.country && (
+                                                        <span className="inline-flex items-center gap-0.5 text-slate-500">
+                                                            · <MapPin className="w-2.5 h-2.5" />
+                                                            {company.country}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {statusCfg && (
+                                            <span
+                                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 ${statusCfg.bg} ${statusCfg.text}`}
+                                            >
+                                                <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dot}`} />
+                                                {statusCfg.label}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {/* Phone & Website Bar */}
+                                    <div className="flex flex-wrap items-center gap-2.5 pt-1 text-xs text-slate-600">
+                                        {company.phone && (
+                                            <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
+                                                <Phone className="w-3 h-3 text-emerald-600" />
+                                                <a href={`tel:${company.phone}`} className="hover:text-emerald-700 font-medium">
+                                                    {company.phone}
+                                                </a>
+                                                <button
+                                                    type="button"
+                                                    title="Copier le numéro"
+                                                    onClick={() => handleCopy(company.phone!, `phone-card-${company.id}`, "Numéro")}
+                                                    className="text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
+                                                >
+                                                    {copiedKey === `phone-card-${company.id}` ? (
+                                                        <Check className="w-3 h-3 text-emerald-600" />
+                                                    ) : (
+                                                        <Copy className="w-3 h-3" />
+                                                    )}
+                                                </button>
+                                            </div>
+                                        )}
+                                        {company.website && (
+                                            <a
+                                                href={company.website.startsWith("http") ? company.website : `https://${company.website}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-800 font-medium bg-emerald-50/50 hover:bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 transition-colors"
+                                            >
+                                                <Globe2 className="w-3 h-3" />
+                                                <span>{cleanWebsiteUrl(company.website)}</span>
+                                                <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                                            </a>
+                                        )}
+                                    </div>
+
+                                    {/* Contacts Accordion */}
+                                    <div className="border-t border-slate-100 pt-2.5">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                                <Users className="w-3.5 h-3.5 text-emerald-600" />
+                                                Décideurs ({company.contacts.length})
+                                            </span>
+                                        </div>
+
+                                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                                            {company.contacts.length === 0 ? (
+                                                <p className="text-xs text-slate-400 italic">Aucun décideur référencé</p>
+                                            ) : (
+                                                company.contacts.map((ct) => {
+                                                    const name = [ct.firstName, ct.lastName].filter(Boolean).join(" ") || "Contact";
+                                                    return (
+                                                        <div
+                                                            key={ct.id}
+                                                            className="p-2 rounded-xl bg-slate-50/80 border border-slate-100 hover:bg-slate-100/80 transition-colors space-y-1"
+                                                        >
+                                                            <div className="flex items-center justify-between gap-1">
+                                                                <div
+                                                                    onClick={() => handleContactClick(ct)}
+                                                                    className="min-w-0 cursor-pointer hover:text-emerald-700"
+                                                                >
+                                                                    <p className="text-xs font-bold text-slate-800 truncate">{name}</p>
+                                                                    {ct.title && (
+                                                                        <p className="text-[11px] text-slate-500 truncate">{ct.title}</p>
+                                                                    )}
+                                                                </div>
+                                                                {ct.linkedin && (
+                                                                    <a
+                                                                        href={ct.linkedin}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className="p-1 rounded text-blue-600 hover:bg-blue-50 transition-colors"
+                                                                        title="Voir le profil LinkedIn"
+                                                                    >
+                                                                        <Linkedin className="w-3.5 h-3.5" />
+                                                                    </a>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Contact action links */}
+                                                            <div className="flex flex-wrap items-center gap-2 pt-0.5 text-[11px]">
+                                                                {ct.email && (
+                                                                    <div className="flex items-center gap-1 text-slate-600 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                                                                        <a
+                                                                            href={`mailto:${ct.email}`}
+                                                                            className="hover:text-emerald-700 flex items-center gap-1 font-medium truncate max-w-[150px]"
+                                                                        >
+                                                                            <Mail className="w-2.5 h-2.5 text-slate-400" />
+                                                                            <span className="truncate">{ct.email}</span>
+                                                                        </a>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleCopy(ct.email!, `mail-${ct.id}`, "Email")}
+                                                                            title="Copier l'email"
+                                                                            className="text-slate-400 hover:text-slate-700 cursor-pointer p-0.5"
+                                                                        >
+                                                                            {copiedKey === `mail-${ct.id}` ? (
+                                                                                <Check className="w-2.5 h-2.5 text-emerald-600" />
+                                                                            ) : (
+                                                                                <Copy className="w-2.5 h-2.5" />
+                                                                            )}
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                                {ct.phone && (
+                                                                    <div className="flex items-center gap-1 text-slate-600 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                                                                        <a
+                                                                            href={`tel:${ct.phone}`}
+                                                                            className="hover:text-emerald-700 flex items-center gap-1 font-medium"
+                                                                        >
+                                                                            <Phone className="w-2.5 h-2.5 text-slate-400" />
+                                                                            <span>{ct.phone}</span>
+                                                                        </a>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleCopy(ct.phone!, `ct-phone-${ct.id}`, "Ligne directe")}
+                                                                            title="Copier le numéro"
+                                                                            className="text-slate-400 hover:text-slate-700 cursor-pointer p-0.5"
+                                                                        >
+                                                                            {copiedKey === `ct-phone-${ct.id}` ? (
+                                                                                <Check className="w-2.5 h-2.5 text-emerald-600" />
+                                                                            ) : (
+                                                                                <Copy className="w-2.5 h-2.5" />
+                                                                            )}
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Card Footer */}
+                                <button
+                                    type="button"
+                                    onClick={() => handleCompanyClick(company)}
+                                    className="w-full mt-2 py-2 px-3 rounded-xl border border-[var(--elan-line)] bg-slate-50 hover:bg-emerald-50 text-xs font-semibold text-slate-700 hover:text-emerald-700 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                                >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>Consulter la fiche détaillée</span>
+                                </button>
+                            </div>
+                        );
+                    })}
+                </div>
+            ) : (
+                /* MODE DÉCIDEURS DIRECTORY */
+                <div className="bg-[var(--elan-surface)] rounded-2xl border border-[var(--elan-line)] overflow-hidden shadow-xs">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full text-left border-collapse text-xs">
+                            <thead>
+                                <tr className="bg-[var(--elan-paper)] border-b border-[var(--elan-line)] text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                    <th className="py-3.5 px-4">Décideur</th>
+                                    <th className="py-3.5 px-4">Poste / Fonction</th>
+                                    <th className="py-3.5 px-4">Entreprise</th>
+                                    <th className="py-3.5 px-4">Email Direct</th>
+                                    <th className="py-3.5 px-4">Ligne Directe</th>
+                                    <th className="py-3.5 px-4">LinkedIn</th>
+                                    <th className="py-3.5 px-4 text-right">Fiche</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[var(--elan-line)]">
+                                {paginatedContacts.map(({ contact, company }) => {
+                                    const fullName = [contact.firstName, contact.lastName].filter(Boolean).join(" ") || "Contact";
+
+                                    return (
+                                        <tr
+                                            key={`${company.id}-${contact.id}`}
+                                            className="hover:bg-emerald-50/25 transition-colors cursor-pointer group"
+                                            onClick={() => handleContactClick(contact)}
+                                        >
+                                            {/* Décideur */}
+                                            <td className="py-3.5 px-4 align-middle">
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0">
+                                                        {getInitials(fullName)}
+                                                    </div>
+                                                    <span className="font-bold text-[var(--elan-ink)] text-xs sm:text-sm group-hover:text-emerald-700 transition-colors">
+                                                        {fullName}
+                                                    </span>
+                                                </div>
+                                            </td>
+
+                                            {/* Poste */}
+                                            <td className="py-3.5 px-4 align-middle font-medium text-slate-700">
+                                                {contact.title || <span className="text-slate-400">—</span>}
+                                            </td>
+
+                                            {/* Entreprise */}
+                                            <td className="py-3.5 px-4 align-middle font-semibold text-[var(--elan-ink)]">
+                                                <div className="flex items-center gap-1.5">
+                                                    <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                                    <span className="truncate max-w-[160px]">{company.name}</span>
+                                                </div>
+                                            </td>
+
+                                            {/* Email */}
+                                            <td className="py-3.5 px-4 align-middle">
+                                                {contact.email ? (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <a
+                                                            href={`mailto:${contact.email}`}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            className="text-emerald-700 hover:underline font-medium truncate max-w-[180px]"
+                                                        >
+                                                            {contact.email}
+                                                        </a>
+                                                        <button
+                                                            type="button"
+                                                            title="Copier l'email"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleCopy(contact.email!, `dir-mail-${contact.id}`, "Email");
+                                                            }}
+                                                            className="text-slate-400 hover:text-slate-700 cursor-pointer p-0.5"
+                                                        >
+                                                            {copiedKey === `dir-mail-${contact.id}` ? (
+                                                                <Check className="w-3 h-3 text-emerald-600" />
+                                                            ) : (
+                                                                <Copy className="w-3 h-3" />
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-slate-400">—</span>
+                                                )}
+                                            </td>
+
+                                            {/* Phone */}
+                                            <td className="py-3.5 px-4 align-middle">
+                                                {contact.phone ? (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <a
+                                                            href={`tel:${contact.phone}`}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            className="text-slate-800 hover:text-emerald-700 font-medium whitespace-nowrap"
+                                                        >
+                                                            {contact.phone}
+                                                        </a>
+                                                        <button
+                                                            type="button"
+                                                            title="Copier le numéro"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleCopy(contact.phone!, `dir-ph-${contact.id}`, "Ligne directe");
+                                                            }}
+                                                            className="text-slate-400 hover:text-slate-700 cursor-pointer p-0.5"
+                                                        >
+                                                            {copiedKey === `dir-ph-${contact.id}` ? (
+                                                                <Check className="w-3 h-3 text-emerald-600" />
+                                                            ) : (
+                                                                <Copy className="w-3 h-3" />
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-slate-400">—</span>
+                                                )}
+                                            </td>
+
+                                            {/* LinkedIn */}
+                                            <td className="py-3.5 px-4 align-middle">
+                                                {contact.linkedin ? (
+                                                    <a
+                                                        href={contact.linkedin}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline font-semibold"
+                                                    >
+                                                        <Linkedin className="w-3.5 h-3.5" />
+                                                        <span>Profil</span>
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-slate-400">—</span>
+                                                )}
+                                            </td>
+
+                                            {/* Actions */}
+                                            <td className="py-3.5 px-4 align-middle text-right">
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleContactClick(contact);
+                                                    }}
+                                                    className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 transition-all cursor-pointer"
+                                                >
+                                                    <ChevronRight className="w-4 h-4" />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* 6. PAGINATION FOOTER */}
+            {totalItems > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
+                    <div className="flex items-center gap-3 text-xs text-slate-500">
+                        <span>
+                            Affichage de{" "}
+                            <strong className="text-slate-900 font-semibold">
+                                {Math.min(totalItems, (page - 1) * pageSize + 1)}
+                            </strong>{" "}
+                            à{" "}
+                            <strong className="text-slate-900 font-semibold">
+                                {Math.min(totalItems, page * pageSize)}
+                            </strong>{" "}
+                            sur <strong className="text-slate-900 font-semibold">{totalItems}</strong>{" "}
+                            {viewMode === "contacts" ? "décideurs" : "entreprises"}
+                        </span>
+
+                        <div className="flex items-center gap-1.5 ml-2">
+                            <span>Par page :</span>
+                            <select
+                                value={pageSize}
+                                onChange={(e) => {
+                                    setPageSize(Number(e.target.value));
+                                    setPage(1);
+                                }}
+                                className="h-7 px-2 rounded-lg border border-[var(--elan-line)] bg-[var(--elan-surface)] text-xs font-semibold cursor-pointer"
+                            >
+                                <option value={10}>10</option>
+                                <option value={25}>25</option>
+                                <option value={50}>50</option>
+                                <option value={100}>100</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {totalPages > 1 && (
+                        <div className="flex items-center gap-1">
+                            <button
+                                type="button"
+                                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                disabled={page <= 1}
+                                className="px-3 py-1.5 rounded-lg border border-[var(--elan-line)] bg-[var(--elan-surface)] text-xs font-semibold text-slate-600 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                            >
+                                Précédent
+                            </button>
+
+                            <div className="flex items-center gap-1 px-2 text-xs font-semibold text-slate-500">
+                                Page <span className="text-slate-900 px-1">{page}</span> sur {totalPages}
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                disabled={page >= totalPages}
+                                className="px-3 py-1.5 rounded-lg border border-[var(--elan-line)] bg-[var(--elan-surface)] text-xs font-semibold text-slate-600 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                            >
+                                Suivant
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* DRAWERS & MODALS */}
             {/* Company Drawer */}
             {(showCompanyDrawer || selectedCompany) && (
                 <CompanyDrawer
@@ -991,7 +1938,7 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
                 />
             )}
 
-            {/* Unified Action Drawer (open on row click) */}
+            {/* Unified Action Drawer (opens on row click) */}
             {unifiedDrawerTarget && (
                 <UnifiedActionDrawer
                     isOpen={!!unifiedDrawerTarget}
@@ -1009,7 +1956,7 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
                 />
             )}
 
-            {/* Delete Confirmation */}
+            {/* Delete Confirmation Modal */}
             <ConfirmModal
                 isOpen={showDeleteModal}
                 onClose={() => setShowDeleteModal(false)}

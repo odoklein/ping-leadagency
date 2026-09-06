@@ -50,6 +50,16 @@ export const GET = withErrorHandler(async (
             status: true,
             customData: true,
             listId: true,
+            actions: {
+                select: {
+                    id: true,
+                    result: true,
+                    channel: true,
+                    createdAt: true,
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+            },
             contacts: {
                 select: {
                     id: true,
@@ -63,6 +73,16 @@ export const GET = withErrorHandler(async (
                     linkedin: true,
                     status: true,
                     companyId: true,
+                    actions: {
+                        select: {
+                            id: true,
+                            result: true,
+                            channel: true,
+                            createdAt: true,
+                        },
+                        orderBy: { createdAt: 'desc' },
+                        take: 1,
+                    },
                 },
                 orderBy: { createdAt: 'asc' },
             },
