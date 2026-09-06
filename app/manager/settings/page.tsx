@@ -807,10 +807,6 @@ export default function ManagerSettingsPage() {
                 />
               </div>
 
-                  className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
-                />
-              </div>
-
               <button
                 onClick={handleSaveTransactionalEmailFrom}
                 disabled={transactionalEmailSaving || !transactionalEmailFrom.trim()}
