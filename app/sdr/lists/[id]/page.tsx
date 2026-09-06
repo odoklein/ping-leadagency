@@ -402,7 +402,7 @@ export default function SDRListDetailPage({ params }: { params: Promise<{ id: st
                     keyField="id"
                     searchable
                     searchPlaceholder={`Rechercher ${view === 'companies' ? 'une société' : 'un contact'}...`}
-                    searchFields={view === 'companies' ? ['name', 'industry'] : ['firstName', 'lastName', 'email', 'companyName']}
+                    searchFields={view === 'companies' ? ['name', 'industry', 'phone'] : ['firstName', 'lastName', 'email', 'phone', 'companyName']}
                     pagination
                     pageSize={20}
                     enableSecondaryColumnsToggle={view === 'companies'}

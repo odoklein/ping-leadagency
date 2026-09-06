@@ -832,8 +832,8 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
                                 columns={[...companyColumns, ...customCompanyColumns]}
                                 keyField="id"
                                 searchable
-                                searchPlaceholder="Rechercher une société (nom, industrie, pays)..."
-                                searchFields={["name", "industry", "country"]}
+                                searchPlaceholder="Rechercher une société (nom, industrie, pays, téléphone)..."
+                                searchFields={["name", "industry", "country", "phone"]}
                                 pagination
                                 pageSize={15}
                                 onRowClick={handleCompanyClick}
@@ -860,7 +860,7 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
                                 keyField="id"
                                 searchable
                                 searchPlaceholder="Rechercher un contact..."
-                                searchFields={["firstName", "lastName", "email", "companyName"]}
+                                searchFields={["firstName", "lastName", "email", "phone", "companyName"]}
                                 pagination
                                 pageSize={15}
                                 onRowClick={handleContactClick}

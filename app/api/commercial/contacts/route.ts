@@ -67,6 +67,7 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
         contactWhere.OR = [
             { firstName: { contains: search, mode: 'insensitive' } },
             { lastName: { contains: search, mode: 'insensitive' } },
+            { phone: { contains: search, mode: 'insensitive' } },
             { company: { name: { contains: search, mode: 'insensitive' } } },
         ];
     }
