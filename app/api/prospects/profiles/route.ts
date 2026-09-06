@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireRole, withErrorHandler, getPaginationParams, paginatedResponse } from '@/lib/api-utils';
+import { findIdsByPhone } from '@/lib/utils/phone-search';
 
 // ============================================
 // GET /api/prospects/profiles
@@ -37,12 +38,14 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
   }
 
   if (search) {
+    const phoneMatchIds = await findIdsByPhone('ProspectProfile', search);
     where.OR = [
       { firstName: { contains: search, mode: 'insensitive' } },
       { lastName: { contains: search, mode: 'insensitive' } },
       { email: { contains: search, mode: 'insensitive' } },
       { phone: { contains: search, mode: 'insensitive' } },
       { companyName: { contains: search, mode: 'insensitive' } },
+      ...(phoneMatchIds.length > 0 ? [{ id: { in: phoneMatchIds } }] : []),
     ];
   }
 

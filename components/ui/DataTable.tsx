@@ -147,14 +147,27 @@ export function DataTable<T extends Record<string, any>>({
 
     // Filter data (supports nested paths in searchFields e.g. "contact.firstName")
     const filteredData = useMemo(() => {
-        if (!searchQuery.trim()) return data;
+        const trimmedQuery = searchQuery.trim();
+        if (!trimmedQuery) return data;
 
-        const query = searchQuery.toLowerCase();
+        const query = trimmedQuery.toLowerCase();
+        // Phone numbers are stored in inconsistent formats (spaces, dashes, +33 vs 0...).
+        // When the query looks like a phone number, also compare digits-only so
+        // formatting differences between the typed query and the stored value don't matter.
+        const isPhoneLikeQuery = /^[0-9+\-\s().]+$/.test(trimmedQuery);
+        const queryDigits = isPhoneLikeQuery ? trimmedQuery.replace(/\D/g, "") : "";
+
         return data.filter((row) => {
             const fieldsToSearch = searchFields || (Object.keys(row) as (keyof T)[]);
             return fieldsToSearch.some((field) => {
                 const value = getValueAtPath(row, field as string);
-                return value != null && String(value).toLowerCase().includes(query);
+                if (value == null) return false;
+                const stringValue = String(value).toLowerCase();
+                if (stringValue.includes(query)) return true;
+                if (queryDigits.length >= 4) {
+                    return stringValue.replace(/\D/g, "").includes(queryDigits);
+                }
+                return false;
             });
         });
     }, [data, searchQuery, searchFields]);

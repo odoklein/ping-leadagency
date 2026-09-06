@@ -8,6 +8,7 @@ import {
     validateRequest,
     getPaginationParams,
 } from '@/lib/api-utils';
+import { findIdsByPhone } from '@/lib/utils/phone-search';
 import { z } from 'zod';
 
 // ============================================
@@ -53,12 +54,14 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
     if (listId) where.company = { listId };
     if (status) where.status = status;
     if (search) {
+        const phoneMatchIds = await findIdsByPhone('Contact', search);
         where.OR = [
             { firstName: { contains: search, mode: 'insensitive' } },
             { lastName: { contains: search, mode: 'insensitive' } },
             { email: { contains: search, mode: 'insensitive' } },
             { phone: { contains: search, mode: 'insensitive' } },
             { company: { name: { contains: search, mode: 'insensitive' } } },
+            ...(phoneMatchIds.length > 0 ? [{ id: { in: phoneMatchIds } }] : []),
         ];
     }
 

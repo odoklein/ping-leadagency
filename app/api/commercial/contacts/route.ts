@@ -6,6 +6,7 @@ import {
     withErrorHandler,
     AuthError,
 } from '@/lib/api-utils';
+import { findIdsByPhone } from '@/lib/utils/phone-search';
 
 // ============================================
 // GET /api/commercial/contacts
@@ -64,11 +65,13 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
     };
 
     if (search) {
+        const phoneMatchIds = await findIdsByPhone('Contact', search);
         contactWhere.OR = [
             { firstName: { contains: search, mode: 'insensitive' } },
             { lastName: { contains: search, mode: 'insensitive' } },
             { phone: { contains: search, mode: 'insensitive' } },
             { company: { name: { contains: search, mode: 'insensitive' } } },
+            ...(phoneMatchIds.length > 0 ? [{ id: { in: phoneMatchIds } }] : []),
         ];
     }
 
