@@ -2148,21 +2148,31 @@ textarea::placeholder {
     white-space: nowrap;
 }
 
-/* --- Tooltip (collapsed state) --- */
-.cp-tooltip {
-    position: absolute;
-    left: calc(100% + 8px);
-    top: 50%;
-    transform: translateY(-50%) translateX(-4px);
+/* --- Tooltip ---
+   Rendered into <body> by NavTooltip (see components/layout/GlobalSidebar.tsx),
+   because `.cp-sidebar` is overflow:hidden and `.cp-nav` is overflow-x:hidden;
+   both clip an absolutely positioned child no matter its z-index. Coordinates
+   come from the nav item's bounding rect, so positioning is `fixed` here.
+   Sits above .cp-sidebar (50) and .cp-sidebar-hover-expanded (60). */
+.cp-tooltip-portal {
+    position: fixed;
     pointer-events: none;
-    opacity: 0;
-    transition: opacity 120ms ease, transform 120ms ease;
-    z-index: 100;
+    z-index: 200;
+    animation: cp-tooltip-in 120ms ease both;
 }
 
-.cp-nav-item:hover .cp-tooltip {
-    opacity: 1;
-    transform: translateY(-50%) translateX(0);
+.cp-tooltip-portal-centered {
+    transform: translateY(-50%);
+}
+
+@keyframes cp-tooltip-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
 }
 
 .cp-tooltip-inner {
@@ -2194,15 +2204,6 @@ textarea::placeholder {
 }
 
 /* --- Tooltip (expanded state: label + "what this is for" explanation) --- */
-.cp-tooltip-detailed {
-    top: 6px;
-    transform: translateX(-4px);
-}
-
-.cp-nav-item:hover .cp-tooltip-detailed {
-    transform: translateX(0);
-}
-
 .cp-tooltip-inner-detailed {
     flex-direction: column;
     align-items: flex-start;
@@ -2416,7 +2417,7 @@ textarea::placeholder {
     .cp-brand-mark,
     .cp-user-btn,
     .cp-collapse-btn,
-    .cp-tooltip {
+    .cp-tooltip-portal {
         transition: none !important;
         animation: none !important;
     }

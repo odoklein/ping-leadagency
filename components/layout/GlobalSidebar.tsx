@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useState, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useSession, signOut } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -31,6 +32,86 @@ function isPathActive(pathname: string, href: string): boolean {
     return pathname === href || (href !== "/" && pathname.startsWith(href + "/"));
 }
 
+/**
+ * Sidebar tooltip, rendered into <body>.
+ *
+ * It cannot live inside the nav item: `.cp-sidebar` is `overflow: hidden` (it
+ * has to be, so nav labels don't spill out while the width animates on
+ * collapse) and `.cp-nav` is `overflow-x: hidden`. Both clip an absolutely
+ * positioned child placed outside the sidebar's width, no matter its z-index —
+ * which is why these tooltips were invisible. Same reasoning, and the same
+ * fix, as components/ui/DropdownMenu.tsx.
+ */
+function NavTooltip({
+    anchor,
+    variant,
+    children,
+}: {
+    anchor: HTMLElement;
+    variant: "compact" | "detailed";
+    children: React.ReactNode;
+}) {
+    const ref = useRef<HTMLDivElement>(null);
+    const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+    useLayoutEffect(() => {
+        // On touch, "hover" is a tap that never un-taps, and the sidebar is an
+        // overlay rather than a rail — a tooltip there would just get stuck.
+        if (!window.matchMedia("(hover: hover) and (min-width: 1024px)").matches) return;
+
+        const place = () => {
+            const rect = anchor.getBoundingClientRect();
+            const height = ref.current?.offsetHeight ?? 0;
+
+            // The compact tooltip is centred on the item; the detailed one hangs
+            // from just below its top edge, matching the old CSS `top: 6px`.
+            const raw = variant === "compact" ? rect.top + rect.height / 2 : rect.top + 6;
+            // `translateY(-50%)` moves the compact variant up by half its height,
+            // so its usable bounds are offset by that much.
+            const half = variant === "compact" ? height / 2 : 0;
+            const min = 8 + half;
+            const max = window.innerHeight - height + half - 8;
+
+            setPos({
+                left: rect.right + 8,
+                top: max < min ? min : Math.min(Math.max(raw, min), max),
+            });
+        };
+
+        place();
+        // `.cp-nav` scrolls independently of the document, so the listener has to
+        // be in the capture phase to hear scrolls on any ancestor.
+        window.addEventListener("scroll", place, true);
+        window.addEventListener("resize", place);
+        return () => {
+            window.removeEventListener("scroll", place, true);
+            window.removeEventListener("resize", place);
+        };
+    }, [anchor, variant]);
+
+    if (typeof document === "undefined") return null;
+
+    return createPortal(
+        <div
+            ref={ref}
+            className={cn(
+                "cp-tooltip-portal",
+                variant === "compact" && "cp-tooltip-portal-centered"
+            )}
+            // Rendered but hidden until measured, so `offsetHeight` is readable
+            // on the first pass and the tooltip never flashes at the wrong spot.
+            style={{
+                top: pos?.top ?? 0,
+                left: pos?.left ?? 0,
+                visibility: pos ? undefined : "hidden",
+            }}
+        >
+            {children}
+        </div>,
+        document.body
+    );
+}
+
 function SidebarNavItem({
     item,
     isExpanded,
@@ -56,6 +137,9 @@ function SidebarNavItem({
     const shouldShowChildren = hasChildren && isExpanded;
     const [isOpen, setIsOpen] = useState(false);
     const showChildren = isOpen || isActive || isChildActive;
+
+    // The hovered/focused link element, used as the tooltip's anchor.
+    const [anchor, setAnchor] = useState<HTMLElement | null>(null);
 
     if (isHidden) return null;
 
@@ -97,27 +181,44 @@ function SidebarNavItem({
                 <span className="cp-nav-detail">{item.badgeDetail}</span>
             )}
 
-            {!isExpanded && (
-                <div className="cp-tooltip">
+        </>
+    );
+
+    // Which tooltip this item gets: the label when the rail is collapsed, or the
+    // "what is this page for" explanation when it is expanded.
+    const tooltipVariant: "compact" | "detailed" | null = !isExpanded
+        ? "compact"
+        : item.description
+        ? "detailed"
+        : null;
+
+    const hoverProps = tooltipVariant
+        ? {
+              onMouseEnter: (e: React.MouseEvent<HTMLElement>) => setAnchor(e.currentTarget),
+              onMouseLeave: () => setAnchor(null),
+              onFocus: (e: React.FocusEvent<HTMLElement>) => setAnchor(e.currentTarget),
+              onBlur: () => setAnchor(null),
+          }
+        : {};
+
+    const tooltip =
+        anchor && tooltipVariant ? (
+            <NavTooltip anchor={anchor} variant={tooltipVariant}>
+                {tooltipVariant === "compact" ? (
                     <div className="cp-tooltip-inner">
                         {item.label}
                         {item.badge != null && item.badge !== "" && (
                             <span className="cp-tooltip-badge">{item.badge}</span>
                         )}
                     </div>
-                </div>
-            )}
-
-            {isExpanded && item.description && (
-                <div className="cp-tooltip cp-tooltip-detailed">
+                ) : (
                     <div className="cp-tooltip-inner cp-tooltip-inner-detailed">
                         <span className="cp-tooltip-detail-title">{item.label}</span>
                         <span className="cp-tooltip-detail-desc">{item.description}</span>
                     </div>
-                </div>
-            )}
-        </>
-    );
+                )}
+            </NavTooltip>
+        ) : null;
 
     const cls = cn(
         "cp-nav-item",
@@ -126,6 +227,12 @@ function SidebarNavItem({
         depth > 0 && "cp-nav-item-child"
     );
 
+    // Navigating away leaves no mouseleave behind, so dismiss on click too.
+    const handleClick = () => {
+        setAnchor(null);
+        onMobileClose?.();
+    };
+
     const renderLink = (extraClass?: string) => {
         if (item.openInNewTab) {
             return (
@@ -133,8 +240,9 @@ function SidebarNavItem({
                     href={item.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    onClick={onMobileClose}
+                    onClick={handleClick}
                     className={cn(cls, extraClass)}
+                    {...hoverProps}
                 >
                     {content}
                 </a>
@@ -143,8 +251,9 @@ function SidebarNavItem({
         return (
             <Link
                 href={item.href}
-                onClick={onMobileClose}
+                onClick={handleClick}
                 className={cn(cls, extraClass)}
+                {...hoverProps}
             >
                 {content}
             </Link>
@@ -152,7 +261,12 @@ function SidebarNavItem({
     };
 
     if (!shouldShowChildren) {
-        return renderLink();
+        return (
+            <>
+                {renderLink()}
+                {tooltip}
+            </>
+        );
     }
 
     // Parent with collapsible children: link + chevron toggle side-by-side.
@@ -177,6 +291,7 @@ function SidebarNavItem({
                     <ChevronRight className="w-3 h-3" />
                 </button>
             </div>
+            {tooltip}
             <div
                 className={cn(
                     "cp-nav-children-wrap",
