@@ -143,11 +143,14 @@ function SidebarNavItem({
 
     if (isHidden) return null;
 
+    const isNumericBadge = item.badge != null && !isNaN(Number(item.badge));
+    const formattedBadge = isNumericBadge && Number(item.badge) > 99 ? "99+" : item.badge;
+
     const content = (
         <>
             <div
                 className={cn(
-                    "cp-nav-icon-wrap",
+                    "cp-nav-icon-wrap relative",
                     (isActive || isChildActive) && "cp-nav-icon-active"
                 )}
             >
@@ -155,6 +158,12 @@ function SidebarNavItem({
                     className="w-[16px] h-[16px]"
                     strokeWidth={isActive || isChildActive ? 2 : 1.75}
                 />
+                {!isExpanded && item.pulse && (
+                    <span
+                        className="cp-nav-pulse-collapsed"
+                        aria-hidden="true"
+                    />
+                )}
             </div>
 
             <div
@@ -166,14 +175,27 @@ function SidebarNavItem({
                 <span className="truncate">{item.label}</span>
             </div>
 
+            {isExpanded && item.pulse && (
+                <span className="cp-nav-pulse-pill" title={item.pulseLabel || "En direct"}>
+                    <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                    </span>
+                    {item.pulseLabel && (
+                        <span className="cp-nav-pulse-label">{item.pulseLabel}</span>
+                    )}
+                </span>
+            )}
+
             {item.badge != null && item.badge !== "" && (
                 <div
                     className={cn(
                         "cp-nav-badge",
+                        item.badgeVariant === "cockpit" && "cp-nav-badge-cockpit",
                         isExpanded ? "" : "cp-nav-badge-collapsed"
                     )}
                 >
-                    {Number(item.badge) > 99 ? "99+" : item.badge}
+                    {formattedBadge}
                 </div>
             )}
 
@@ -188,7 +210,7 @@ function SidebarNavItem({
     // "what is this page for" explanation when it is expanded.
     const tooltipVariant: "compact" | "detailed" | null = !isExpanded
         ? "compact"
-        : item.description
+        : (item.description || item.tooltipDetail)
         ? "detailed"
         : null;
 
@@ -206,15 +228,56 @@ function SidebarNavItem({
             <NavTooltip anchor={anchor} variant={tooltipVariant}>
                 {tooltipVariant === "compact" ? (
                     <div className="cp-tooltip-inner">
-                        {item.label}
-                        {item.badge != null && item.badge !== "" && (
-                            <span className="cp-tooltip-badge">{item.badge}</span>
+                        <div className="flex items-center gap-1.5 font-medium">
+                            {item.pulse && (
+                                <span className="relative flex h-2 w-2 shrink-0">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                </span>
+                            )}
+                            <span>{item.label}</span>
+                            {item.badge != null && item.badge !== "" && (
+                                <span className={cn(
+                                    "cp-tooltip-badge",
+                                    item.badgeVariant === "cockpit" && "cp-tooltip-badge-cockpit"
+                                )}>
+                                    {item.badge}
+                                </span>
+                            )}
+                        </div>
+                        {item.tooltipDetail && (
+                            <div className="text-[10px] text-emerald-300 font-normal mt-1 border-t border-white/10 pt-1 leading-snug">
+                                {item.tooltipDetail}
+                            </div>
                         )}
                     </div>
                 ) : (
                     <div className="cp-tooltip-inner cp-tooltip-inner-detailed">
-                        <span className="cp-tooltip-detail-title">{item.label}</span>
-                        <span className="cp-tooltip-detail-desc">{item.description}</span>
+                        <div className="flex items-center gap-1.5">
+                            {item.pulse && (
+                                <span className="relative flex h-2 w-2 shrink-0">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                </span>
+                            )}
+                            <span className="cp-tooltip-detail-title">{item.label}</span>
+                            {item.badge != null && item.badge !== "" && (
+                                <span className={cn(
+                                    "cp-tooltip-badge",
+                                    item.badgeVariant === "cockpit" && "cp-tooltip-badge-cockpit"
+                                )}>
+                                    {item.badge}
+                                </span>
+                            )}
+                        </div>
+                        {item.tooltipDetail && (
+                            <div className="text-[11px] text-emerald-300 font-medium mt-0.5 mb-1.5 flex items-center gap-1">
+                                <span>{item.tooltipDetail}</span>
+                            </div>
+                        )}
+                        {item.description && (
+                            <span className="cp-tooltip-detail-desc">{item.description}</span>
+                        )}
                     </div>
                 )}
             </NavTooltip>
@@ -371,6 +434,7 @@ function SidebarSection({
 }
 
 const RAPPELS_HREF = "/sdr/callbacks";
+const COCKPIT_HREF = "/manager/prospection";
 const COMMS_HREFS = [
     "/manager/comms",
     "/sdr/comms",
@@ -395,6 +459,13 @@ export function GlobalSidebar({ navigation }: GlobalSidebarProps) {
         null
     );
     const [commsUnreadCount, setCommsUnreadCount] = useState<number>(0);
+    const [cockpitLiveStatus, setCockpitLiveStatus] = useState<{
+        isLive: boolean;
+        activeSdrsCount: number;
+        callsToday: number;
+        meetingsToday: number;
+        interestedToday: number;
+    } | null>(null);
     const [showUserMenu, setShowUserMenu] = useState(false);
     const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -461,6 +532,35 @@ export function GlobalSidebar({ navigation }: GlobalSidebarProps) {
     }, [userRole]);
 
     useEffect(() => {
+        if (userRole !== "MANAGER" && userRole !== "ADMIN" && userRole !== "BUSINESS_DEVELOPER") return;
+        let cancelled = false;
+        const loadCockpitLiveStatus = async () => {
+            try {
+                const res = await fetch("/api/manager/prospection/live-status");
+                const json = await res.json();
+                if (cancelled || !json.success) return;
+                setCockpitLiveStatus(json.data);
+            } catch {
+                if (!cancelled) setCockpitLiveStatus(null);
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "visible") void loadCockpitLiveStatus();
+        };
+
+        void loadCockpitLiveStatus();
+        const interval = window.setInterval(loadCockpitLiveStatus, 30_000);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        return () => {
+            cancelled = true;
+            window.clearInterval(interval);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+        };
+    }, [userRole]);
+
+    useEffect(() => {
         function handleClickOutside(e: MouseEvent) {
             if (
                 userMenuRef.current &&
@@ -479,32 +579,69 @@ export function GlobalSidebar({ navigation }: GlobalSidebarProps) {
     const effectiveNavigation = useMemo(() => {
         const hasRappels = callbacksCount !== null || nextCallbackDate;
         const hasComms = commsUnreadCount > 0;
-        if (!hasRappels && !hasComms) return navigation;
+        const hasCockpit = cockpitLiveStatus !== null;
+        if (!hasRappels && !hasComms && !hasCockpit) return navigation;
+
+        const mapItem = (item: NavItem): NavItem => {
+            let updated = item;
+            if (item.href === RAPPELS_HREF && hasRappels) {
+                updated = {
+                    ...updated,
+                    badge:
+                        callbacksCount != null
+                            ? String(callbacksCount)
+                            : undefined,
+                    badgeDetail: nextCallbackDate ?? undefined,
+                    badgeVariant: "rappels" as const,
+                };
+            }
+            if (COMMS_HREFS.includes(item.href) && hasComms) {
+                updated = {
+                    ...updated,
+                    badge: String(commsUnreadCount),
+                    badgeVariant: "comms" as const,
+                };
+            }
+            if (item.href === COCKPIT_HREF && hasCockpit && cockpitLiveStatus) {
+                const isLive = cockpitLiveStatus.isLive;
+                const meetings = cockpitLiveStatus.meetingsToday;
+                const calls = cockpitLiveStatus.callsToday;
+                const sdrs = cockpitLiveStatus.activeSdrsCount;
+
+                const badge = meetings > 0 ? `${meetings} RDV` : undefined;
+                const pulse = isLive;
+                const pulseLabel = isLive && !badge ? "Live" : undefined;
+
+                let tooltipDetail: string | undefined;
+                if (isLive) {
+                    tooltipDetail = `🟢 En direct • ${sdrs} SDR${sdrs > 1 ? "s" : ""} actif${sdrs > 1 ? "s" : ""} • ${calls} appel${calls > 1 ? "s" : ""}${meetings > 0 ? ` • ${meetings} RDV` : ""}`;
+                } else if (calls > 0) {
+                    tooltipDetail = `Aujourd'hui : ${calls} appel${calls > 1 ? "s" : ""}${meetings > 0 ? ` • ${meetings} RDV` : ""}`;
+                }
+
+                updated = {
+                    ...updated,
+                    badge,
+                    badgeVariant: "cockpit" as const,
+                    pulse,
+                    pulseLabel,
+                    tooltipDetail,
+                };
+            }
+            if (updated.children) {
+                updated = {
+                    ...updated,
+                    children: updated.children.map(mapItem),
+                };
+            }
+            return updated;
+        };
+
         return navigation.map((section) => ({
             ...section,
-            items: section.items.map((item) => {
-                if (item.href === RAPPELS_HREF && hasRappels) {
-                    return {
-                        ...item,
-                        badge:
-                            callbacksCount != null
-                                ? String(callbacksCount)
-                                : undefined,
-                        badgeDetail: nextCallbackDate ?? undefined,
-                        badgeVariant: "rappels" as const,
-                    };
-                }
-                if (COMMS_HREFS.includes(item.href) && hasComms) {
-                    return {
-                        ...item,
-                        badge: String(commsUnreadCount),
-                        badgeVariant: "comms" as const,
-                    };
-                }
-                return item;
-            }),
+            items: section.items.map(mapItem),
         }));
-    }, [navigation, callbacksCount, nextCallbackDate, commsUnreadCount]);
+    }, [navigation, callbacksCount, nextCallbackDate, commsUnreadCount, cockpitLiveStatus]);
 
     const userName = session?.user?.name ?? "";
     const userEmail = session?.user?.email ?? "";

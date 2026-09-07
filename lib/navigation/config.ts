@@ -45,6 +45,10 @@ export interface NavItem {
   roles?: UserRole[];
   badge?: string;
   badgeDetail?: string;
+  badgeVariant?: "default" | "rappels" | "comms" | "cockpit" | "pulse";
+  pulse?: boolean;
+  pulseLabel?: string;
+  tooltipDetail?: string;
   children?: NavItem[];
   openInNewTab?: boolean;
 }

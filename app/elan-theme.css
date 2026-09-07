@@ -463,6 +463,72 @@ body.elan-app :focus-visible {
     box-shadow: none !important;
 }
 
+.cp-nav-badge.cp-nav-badge-cockpit {
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%) !important;
+    border: 1px solid rgba(52, 211, 153, 0.5) !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    padding: 0 6px !important;
+    font-size: 10px !important;
+    box-shadow: 0 1px 3px rgba(5, 150, 105, 0.3) !important;
+}
+
+.cp-nav-badge-collapsed.cp-nav-badge-cockpit,
+.cp-nav-pulse-collapsed {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 8px;
+    height: 8px;
+    min-width: 8px;
+    padding: 0;
+    font-size: 0;
+    border-radius: 50%;
+    background: #10b981 !important;
+    border: 1.5px solid #0a302d !important;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.8) !important;
+    animation: cp-pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes cp-pulse-ring {
+    0% {
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    }
+}
+
+.cp-nav-pulse-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 5px;
+    border-radius: 9999px;
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    margin-left: auto;
+    margin-right: 4px;
+    flex-shrink: 0;
+}
+
+.cp-nav-pulse-label {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #34d399;
+}
+
+.cp-tooltip-badge-cockpit {
+    background: #059669 !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(52, 211, 153, 0.4) !important;
+}
+
 .cp-nav-detail,
 .cp-user-role {
     color: rgba(255, 255, 255, 0.42) !important;
