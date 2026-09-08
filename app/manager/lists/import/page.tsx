@@ -42,6 +42,9 @@ import { CSV_PRESETS, detectBestPreset, applyPresetMappings } from "@/lib/csv/pr
 import { splitMultiActionCell } from "@/lib/csv/sanitizer";
 import { AiMappingAssistant } from "./_components/AiMappingAssistant";
 import { LiveCrmLeadPreview } from "./_components/LiveCrmLeadPreview";
+import { ImportStepper } from "./_components/ImportStepper";
+import { ImportHeader } from "./_components/ImportHeader";
+import { BlockingIssuesAlert } from "./_components/BlockingIssuesAlert";
 import type { AiMappingSuggestion } from "@/app/api/lists/import/ai-mapping/route";
 
 // ============================================
@@ -266,6 +269,7 @@ export default function ImportListPage() {
         actions?: number;
         errors: number;
         errorDetails?: string[];
+        listId?: string;
     } | null>(null);
 
     const [importProgress, setImportProgress] = useState<number | null>(null);
@@ -277,10 +281,51 @@ export default function ImportListPage() {
     } | null>(null);
     const [customFieldValue, setCustomFieldValue] = useState("");
 
+    const [maxVisitedStep, setMaxVisitedStep] = useState<number>(1);
+    const [step1Attempted, setStep1Attempted] = useState(false);
+    const [step3Attempted, setStep3Attempted] = useState(false);
+    const [importFailureError, setImportFailureError] = useState<string | null>(null);
+
     const mappedCount = mappings.filter(m => m.targetField && m.targetField !== "").length;
     const requiredMapped = mappings.some(m => m.targetField === "company.name");
-    const canGoToType = !!file && !!missionId && (importMode === "new" ? !!listName?.trim() : !!listId);
     const mappingCompletion = csvHeaders.length > 0 ? Math.round((mappedCount / csvHeaders.length) * 100) : 0;
+
+    const goToStep = (targetStep: 1 | 2 | 3 | 4 | 5) => {
+        if (targetStep <= maxVisitedStep) {
+            setStep(targetStep);
+        }
+    };
+
+    const getStep1Errors = (): string[] => {
+        const errors: string[] = [];
+        if (!file) errors.push("Fichier CSV manquant : Veuillez glisser ou sélectionner un fichier .csv.");
+        if (!missionId) errors.push("Mission non sélectionnée : Choisissez la mission commerciale cible.");
+        if (importMode === "new" && !listName?.trim()) {
+            errors.push("Nom de liste manquant : Donnez un titre à la nouvelle liste de prospects.");
+        }
+        if (importMode === "existing" && !listId) {
+            errors.push("Liste existante non choisie : Sélectionnez la liste existante de destination.");
+        }
+        return errors;
+    };
+
+    const step1Errors = getStep1Errors();
+    const canGoToType = step1Errors.length === 0;
+
+    const handleProceedToStep2 = () => {
+        setStep1Attempted(true);
+        if (step1Errors.length > 0) {
+            showError("Informations manquantes", `${step1Errors.length} élément(s) requis avant de continuer.`);
+            return;
+        }
+        setMaxVisitedStep((prev) => Math.max(prev, 2));
+        setStep(2);
+    };
+
+    const handleProceedToStep3 = () => {
+        setMaxVisitedStep((prev) => Math.max(prev, 3));
+        setStep(3);
+    };
 
     const autoMapStatusValues = () => {
         if (statusMappings.length === 0) return;
@@ -912,9 +957,17 @@ export default function ImportListPage() {
             warnings,
         });
 
-        if (errors.length === 0) {
-            setStep(4);
+        if (errors.length > 0) {
+            setStep3Attempted(true);
+            showError(
+                "Validation bloquée",
+                `${errors.length} problème(s) bloquant(s) identifié(s). Consultez les alertes pour corriger.`
+            );
+            return;
         }
+
+        setMaxVisitedStep((prev) => Math.max(prev, 4));
+        setStep(4);
     };
 
     // ============================================
@@ -926,6 +979,7 @@ export default function ImportListPage() {
 
         setIsImporting(true);
         setImportProgress(0);
+        setImportFailureError(null);
 
         try {
             const totalRows = await countFileLines(file);
@@ -1014,7 +1068,9 @@ export default function ImportListPage() {
             if (!shouldChunk) {
                 const single = await uploadChunk(file, { chunkRows: totalRows, processedRowsBefore: 0, totalRowsAll: totalRows });
                 if (single.error || !single.data) {
-                    showError("Erreur", single.error || "L'import a échoué");
+                    const err = single.error || "L'import a échoué";
+                    setImportFailureError(err);
+                    showError("Erreur", err);
                     return;
                 }
                 setImportProgress(100);
@@ -1025,6 +1081,7 @@ export default function ImportListPage() {
                     errors: single.data.errors,
                     errorDetails: (single.data as { errorDetails?: string[] }).errorDetails,
                 });
+                setMaxVisitedStep(5);
                 setStep(5);
                 success("Import réussi", `${single.data.companiesCreated} sociétés et ${single.data.contactsCreated} contacts importés`);
                 return;
@@ -1055,7 +1112,9 @@ export default function ImportListPage() {
                     totalRowsAll: totalRows,
                 });
                 if (result.error || !result.data) {
-                    showError("Erreur", result.error || "L'import a échoué");
+                    const err = result.error || "L'import a échoué";
+                    setImportFailureError(err);
+                    showError("Erreur", err);
                     return;
                 }
                 targetListId = result.data.listId || targetListId;
@@ -1077,7 +1136,9 @@ export default function ImportListPage() {
                 actions: actionsTotal,
                 errors: errorsTotal,
                 errorDetails: allErrors,
+                listId: targetListId,
             });
+            setMaxVisitedStep(5);
             setStep(5);
             success("Import réussi", `${companiesTotal} sociétés et ${contactsTotal} contacts importés`);
         } catch (err) {
@@ -1111,178 +1172,197 @@ export default function ImportListPage() {
     // STEP INDICATORS
     // ============================================
 
-    const steps = [
-        { num: 1, label: "Fichier", icon: Upload },
-        { num: 2, label: "Type", icon: Building2 },
-        { num: 3, label: "Mapping", icon: ArrowRight },
-        { num: 4, label: "Validation", icon: CheckCircle2 },
-        { num: 5, label: "Import", icon: Database },
-    ];
-
     // ============================================
     // RENDER
     // ============================================
 
     return (
-        <div className={`elan-page mx-auto transition-all duration-300 ${step === 3 ? "max-w-7xl" : "max-w-4xl"}`}>
-            {/* Header */}
-            <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-white to-indigo-50 p-5">
-                <div className="flex items-center gap-4">
-                <Link href="/manager/lists">
-                    <Button variant="ghost" size="sm">
-                        <ArrowLeft className="w-4 h-4" />
-                    </Button>
-                </Link>
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Importer CSV</h1>
-                    <p className="text-slate-500 mt-1">
-                        Importez des societes, contacts, et historique d&apos;actions en 5 etapes
-                    </p>
-                </div>
-            </div>
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div className="rounded-xl bg-white/80 border border-slate-200 p-3">
-                        <p className="text-xs text-slate-500">Fichier</p>
-                        <p className="text-sm font-medium text-slate-900 truncate">{file?.name || "Aucun fichier"}</p>
-                    </div>
-                    <div className="rounded-xl bg-white/80 border border-slate-200 p-3">
-                        <p className="text-xs text-slate-500">Mission</p>
-                        <p className="text-sm font-medium text-slate-900 truncate">{missions.find(m => m.id === missionId)?.name || "Non selectionnee"}</p>
-                    </div>
-                    <div className="rounded-xl bg-white/80 border border-slate-200 p-3">
-                        <p className="text-xs text-slate-500">Mapping</p>
-                        <p className="text-sm font-medium text-slate-900">{mappedCount}/{csvHeaders.length || 0} colonnes</p>
-                    </div>
-                </div>
-            </div>
+        <div className={`elan-page mx-auto transition-all duration-300 space-y-6 ${step === 3 ? "max-w-7xl" : "max-w-4xl"}`}>
+            {/* Modern Header Component */}
+            <ImportHeader
+                file={file}
+                totalRows={totalRows}
+                missionName={missions.find((m) => m.id === missionId)?.name || ""}
+                mappedCount={mappedCount}
+                totalHeaders={csvHeaders.length}
+                importType={importType}
+                currentStep={step}
+            />
 
-            {/* Step Indicator */}
-            <div className="flex items-center justify-between">
-                {steps.map((s, i) => (
-                    <div key={s.num} className="flex items-center">
-                        <div className={`flex items-center gap-2 px-4 py-2 rounded-full ${step >= s.num
-                            ? "bg-indigo-50 text-indigo-600"
-                            : "bg-slate-100 text-slate-500"
-                            }`}>
-                            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${step > s.num
-                                ? "bg-indigo-500 text-white"
-                                : step === s.num
-                                    ? "bg-indigo-500 text-white"
-                                    : "bg-slate-300 text-slate-600"
-                                }`}>
-                                {step > s.num ? <Check className="w-3 h-3" /> : s.num}
-                            </span>
-                            <span className="text-sm font-medium">{s.label}</span>
-                        </div>
-                        {i < steps.length - 1 && (
-                            <div className={`w-12 h-0.5 mx-2 ${step > s.num ? "bg-indigo-500" : "bg-slate-200"
-                                }`} />
-                        )}
-                    </div>
-                ))}
-            </div>
+            {/* Modern Interactive Stepper */}
+            <ImportStepper
+                currentStep={step}
+                maxVisitedStep={maxVisitedStep}
+                onStepClick={goToStep}
+            />
 
             {/* Step 1: File & Mission Selection */}
             {step === 1 && (
                 <Card>
                     <div className="space-y-6">
+                        {/* Blocking errors banner in Step 1 if attempted */}
+                        {step1Attempted && step1Errors.length > 0 && (
+                            <BlockingIssuesAlert
+                                title="Informations requises avant de continuer"
+                                errors={step1Errors}
+                            />
+                        )}
+
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
-                                Destination
+                            <label className="block text-xs uppercase font-bold text-slate-500 mb-2">
+                                1. Mode de destination
                             </label>
-                            <div className="flex gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <button
                                     type="button"
                                     onClick={() => setImportMode("new")}
-                                    className={`flex-1 p-4 rounded-xl border-2 text-left transition-all ${importMode === "new"
-                                        ? "border-indigo-500 bg-indigo-50"
-                                        : "border-slate-200 bg-white hover:border-slate-300"
-                                        }`}
+                                    className={`relative p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                                        importMode === "new"
+                                            ? "border-indigo-600 bg-indigo-50/60 shadow-xs"
+                                            : "border-slate-200 bg-white hover:border-slate-300"
+                                    }`}
                                 >
-                                    <span className="font-semibold text-slate-900">Nouvelle liste</span>
-                                    <p className="text-sm text-slate-500 mt-1">Créer une nouvelle liste dans la mission</p>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className="font-bold text-sm text-slate-900">Nouvelle liste</span>
+                                        {importMode === "new" && (
+                                            <div className="h-5 w-5 rounded-full bg-indigo-600 text-white flex items-center justify-center">
+                                                <Check className="w-3 h-3 stroke-[3]" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-slate-600">Créer une nouvelle liste dédiée dans la mission commerciale.</p>
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setImportMode("existing")}
-                                    className={`flex-1 p-4 rounded-xl border-2 text-left transition-all ${importMode === "existing"
-                                        ? "border-indigo-500 bg-indigo-50"
-                                        : "border-slate-200 bg-white hover:border-slate-300"
-                                        }`}
+                                    className={`relative p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                                        importMode === "existing"
+                                            ? "border-indigo-600 bg-indigo-50/60 shadow-xs"
+                                            : "border-slate-200 bg-white hover:border-slate-300"
+                                    }`}
                                 >
-                                    <span className="font-semibold text-slate-900">Ajouter à une liste existante</span>
-                                    <p className="text-sm text-slate-500 mt-1">Mapper les colonnes et fusionner avec la liste</p>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className="font-bold text-sm text-slate-900">Fusionner avec une liste existante</span>
+                                        {importMode === "existing" && (
+                                            <div className="h-5 w-5 rounded-full bg-indigo-600 text-white flex items-center justify-center">
+                                                <Check className="w-3 h-3 stroke-[3]" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-slate-600">Enrichir une liste existante et mettre à jour ses prospects.</p>
                                 </button>
                             </div>
                         </div>
 
-                        <Select
-                            label="Mission *"
-                            placeholder="Sélectionner une mission..."
-                            options={missions.map(m => ({ value: m.id, label: m.name }))}
-                            value={missionId}
-                            onChange={(v) => { setMissionId(v); setListId(""); }}
-                            searchable
-                        />
+                        <div className="space-y-4 pt-2 border-t border-slate-100">
+                            <label className="block text-xs uppercase font-bold text-slate-500">
+                                2. Mission commerciale & Identifiant
+                            </label>
 
-                        {importMode === "new" ? (
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Nom de la liste *
-                                </label>
-                                <input
-                                    type="text"
-                                    value={listName}
-                                    onChange={(e) => setListName(e.target.value)}
-                                    placeholder="Ex: Liste CSV Mars 2025"
-                                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-                                />
-                            </div>
-                        ) : (
-                            <>
-                                <Select
-                                    label="Liste existante *"
-                                    placeholder={missionId ? "Choisir une liste..." : "Sélectionnez d'abord une mission"}
-                                    options={lists.map(l => ({ value: l.id, label: l.name }))}
-                                    value={listId}
-                                    onChange={setListId}
-                                    searchable
-                                    disabled={!missionId || lists.length === 0}
-                                />
+                            <Select
+                                label="Mission cible *"
+                                placeholder="Sélectionner la mission de rattachement..."
+                                options={missions.map((m) => ({ value: m.id, label: m.name }))}
+                                value={missionId}
+                                onChange={(v) => { setMissionId(v); setListId(""); }}
+                                searchable
+                            />
+
+                            {importMode === "new" ? (
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                                        Si la société existe déjà et a déjà été travaillée
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                                        Nom de la nouvelle liste *
                                     </label>
-                                    <select
-                                        value={whenAlreadyWorkedOn}
-                                        onChange={(e) => setWhenAlreadyWorkedOn(e.target.value as "skip" | "add_anyway")}
-                                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-                                    >
-                                        <option value="skip">Ignorer la ligne (ne pas ajouter)</option>
-                                        <option value="add_anyway">Ajouter quand même (nouveaux contacts possibles)</option>
-                                    </select>
-                                    <p className="text-xs text-slate-500 mt-1">
-                                        « Déjà travaillée » = la société a au moins une action enregistrée.
-                                    </p>
+                                    <input
+                                        type="text"
+                                        value={listName}
+                                        onChange={(e) => setListName(e.target.value)}
+                                        placeholder="Ex: Prospects B2B SaaS - Mars 2025"
+                                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                    />
                                 </div>
-                            </>
-                        )}
+                            ) : (
+                                <div className="space-y-3">
+                                    <Select
+                                        label="Sélectionner la liste existante *"
+                                        placeholder={missionId ? "Choisir une liste..." : "Sélectionnez d'abord une mission ci-dessus"}
+                                        options={lists.map((l) => ({ value: l.id, label: l.name }))}
+                                        value={listId}
+                                        onChange={setListId}
+                                        searchable
+                                        disabled={!missionId || lists.length === 0}
+                                    />
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                            Règle pour les prospects déjà travaillés dans cette liste
+                                        </label>
+                                        <select
+                                            value={whenAlreadyWorkedOn}
+                                            onChange={(e) => setWhenAlreadyWorkedOn(e.target.value as "skip" | "add_anyway")}
+                                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                                        >
+                                            <option value="skip">Ignorer la ligne (ne pas écraser les données existantes)</option>
+                                            <option value="add_anyway">Ajouter quand même (mettre à jour & ajouter nouveaux contacts)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
 
-                        <FileUpload
-                            label="Fichier CSV *"
-                            accept=".csv"
-                            maxSize={200}
-                            onFilesSelected={handleFileSelected}
-                        />
+                        <div className="space-y-3 pt-2 border-t border-slate-100">
+                            <label className="block text-xs uppercase font-bold text-slate-500">
+                                3. Fichier source CSV
+                            </label>
 
-                        <div className="flex justify-end">
+                            <FileUpload
+                                label="Glissez votre fichier CSV ou cliquez pour parcourir *"
+                                accept=".csv"
+                                maxSize={200}
+                                onFilesSelected={handleFileSelected}
+                            />
+
+                            {file && (
+                                <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50/80 border border-emerald-200 text-xs text-emerald-900">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className="h-8 w-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center flex-shrink-0">
+                                            <Check className="w-4 h-4" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="font-bold truncate">{file.name}</p>
+                                            <p className="text-[11px] text-emerald-700">
+                                                {(file.size / 1024).toFixed(1)} Ko • {totalRows.toLocaleString()} lignes • {csvHeaders.length} colonnes détectées
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Badge variant="primary" className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px]">
+                                        Format CSV OK
+                                    </Badge>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Step 1 Actions Footer */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100">
+                            <div className="flex items-center gap-2 text-xs">
+                                {canGoToType ? (
+                                    <span className="inline-flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full font-medium">
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                        Prêt pour l&apos;étape suivante
+                                    </span>
+                                ) : (
+                                    <span className="inline-flex items-center gap-1.5 text-slate-500 bg-slate-100 px-3 py-1 rounded-full text-[11px]">
+                                        <AlertCircle className="w-3 h-3 text-amber-500" />
+                                        {step1Errors.length} information{step1Errors.length > 1 ? "s" : ""} requise{step1Errors.length > 1 ? "s" : ""}
+                                    </span>
+                                )}
+                            </div>
+
                             <Button
                                 variant="primary"
-                                onClick={() => setStep(2)}
-                                disabled={!canGoToType}
+                                onClick={handleProceedToStep2}
                                 className="gap-2"
                             >
-                                Suivant
+                                <span>Continuer vers le type d&apos;import</span>
                                 <ArrowRight className="w-4 h-4" />
                             </Button>
                         </div>
@@ -1295,77 +1375,108 @@ export default function ImportListPage() {
                 <Card>
                     <div className="space-y-6">
                         <div>
-                            <h2 className="text-lg font-semibold text-slate-900 mb-2">Type d'import</h2>
-                            <p className="text-sm text-slate-500">
-                                Choisissez ce que vous souhaitez importer depuis votre fichier CSV
+                            <h2 className="text-lg font-bold text-slate-900 mb-1">
+                                Modèle de données à importer
+                            </h2>
+                            <p className="text-xs sm:text-sm text-slate-500">
+                                Définissez si votre fichier CSV contient uniquement des comptes entreprises ou des comptes avec contacts individuels.
                             </p>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <button
+                                type="button"
                                 onClick={() => setImportType("companies-only")}
-                                className={`p-6 rounded-xl border-2 transition-all text-left ${importType === "companies-only"
-                                    ? "border-indigo-500 bg-indigo-50"
-                                    : "border-slate-200 bg-white hover:border-slate-300"
-                                    }`}
+                                className={`relative p-5 rounded-2xl border-2 transition-all duration-200 text-left cursor-pointer group ${
+                                    importType === "companies-only"
+                                        ? "border-indigo-600 bg-indigo-50/60 shadow-sm shadow-indigo-500/10"
+                                        : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-2xs"
+                                }`}
                             >
-                                <div className="flex items-start gap-4">
-                                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 ${importType === "companies-only"
-                                        ? "bg-indigo-100 text-indigo-600"
-                                        : "bg-slate-100 text-slate-400"
-                                        }`}>
-                                        <Building2 className="w-6 h-6" />
+                                <div className="flex items-start gap-3.5">
+                                    <div
+                                        className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${
+                                            importType === "companies-only"
+                                                ? "bg-indigo-600 text-white shadow-xs"
+                                                : "bg-slate-100 text-slate-500 group-hover:bg-slate-200"
+                                        }`}
+                                    >
+                                        <Building2 className="w-5 h-5" />
                                     </div>
-                                    <div className="flex-1">
-                                        <h3 className="font-semibold text-slate-900 mb-1">Sociétés uniquement</h3>
-                                        <p className="text-sm text-slate-600">
-                                            Importez uniquement les sociétés. Les SDR pourront appeler directement les sociétés qui ont un numéro de téléphone.
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-2 mb-1">
+                                            <h3 className="font-bold text-sm text-slate-900">Sociétés uniquement</h3>
+                                            {importType === "companies-only" && (
+                                                <div className="h-5 w-5 rounded-full bg-indigo-600 text-white flex items-center justify-center">
+                                                    <Check className="w-3 h-3 stroke-[3]" />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-slate-600 leading-relaxed mb-3">
+                                            Idéal pour les annuaires, bases de données de standards téléphoniques et ciblages par entreprise.
                                         </p>
+                                        <div className="flex flex-wrap gap-1 text-[10px] text-slate-500">
+                                            <span className="px-2 py-0.5 rounded bg-white border border-slate-200">1 ligne = 1 société</span>
+                                            <span className="px-2 py-0.5 rounded bg-white border border-slate-200">Téléphone standard</span>
+                                        </div>
                                     </div>
-                                    {importType === "companies-only" && (
-                                        <Check className="w-5 h-5 text-indigo-600 flex-shrink-0" />
-                                    )}
                                 </div>
                             </button>
 
                             <button
+                                type="button"
                                 onClick={() => setImportType("companies-contacts")}
-                                className={`p-6 rounded-xl border-2 transition-all text-left ${importType === "companies-contacts"
-                                    ? "border-indigo-500 bg-indigo-50"
-                                    : "border-slate-200 bg-white hover:border-slate-300"
-                                    }`}
+                                className={`relative p-5 rounded-2xl border-2 transition-all duration-200 text-left cursor-pointer group ${
+                                    importType === "companies-contacts"
+                                        ? "border-indigo-600 bg-indigo-50/60 shadow-sm shadow-indigo-500/10"
+                                        : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-2xs"
+                                }`}
                             >
-                                <div className="flex items-start gap-4">
-                                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 ${importType === "companies-contacts"
-                                        ? "bg-indigo-100 text-indigo-600"
-                                        : "bg-slate-100 text-slate-400"
-                                        }`}>
-                                        <User className="w-6 h-6" />
+                                <span className="absolute -top-2.5 right-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs">
+                                    Recommandé
+                                </span>
+                                <div className="flex items-start gap-3.5">
+                                    <div
+                                        className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${
+                                            importType === "companies-contacts"
+                                                ? "bg-indigo-600 text-white shadow-xs"
+                                                : "bg-slate-100 text-slate-500 group-hover:bg-slate-200"
+                                        }`}
+                                    >
+                                        <User className="w-5 h-5" />
                                     </div>
-                                    <div className="flex-1">
-                                        <h3 className="font-semibold text-slate-900 mb-1">Sociétés + Contacts</h3>
-                                        <p className="text-sm text-slate-600">
-                                            Importez les sociétés avec leurs contacts associés. Permet un ciblage plus précis.
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-2 mb-1">
+                                            <h3 className="font-bold text-sm text-slate-900">Sociétés + Contacts</h3>
+                                            {importType === "companies-contacts" && (
+                                                <div className="h-5 w-5 rounded-full bg-indigo-600 text-white flex items-center justify-center">
+                                                    <Check className="w-3 h-3 stroke-[3]" />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-slate-600 leading-relaxed mb-3">
+                                            Importez les décideurs avec leurs coordonnées directes (email direct, téléphone portable, titre, LinkedIn).
                                         </p>
+                                        <div className="flex flex-wrap gap-1 text-[10px] text-slate-500">
+                                            <span className="px-2 py-0.5 rounded bg-white border border-slate-200">Prospection nominative</span>
+                                            <span className="px-2 py-0.5 rounded bg-white border border-slate-200">Lignes directes SDR</span>
+                                        </div>
                                     </div>
-                                    {importType === "companies-contacts" && (
-                                        <Check className="w-5 h-5 text-indigo-600 flex-shrink-0" />
-                                    )}
                                 </div>
                             </button>
                         </div>
 
-                        <div className="flex justify-between">
+                        <div className="flex justify-between pt-4 border-t border-slate-100">
                             <Button variant="ghost" onClick={() => setStep(1)} className="gap-2">
                                 <ArrowLeft className="w-4 h-4" />
                                 Retour
                             </Button>
                             <Button
                                 variant="primary"
-                                onClick={() => setStep(3)}
+                                onClick={handleProceedToStep3}
                                 className="gap-2"
                             >
-                                Suivant
+                                Continuer vers le mapping
                                 <ArrowRight className="w-4 h-4" />
                             </Button>
                         </div>
@@ -1414,6 +1525,15 @@ export default function ImportListPage() {
                                         <p className="text-xs text-rose-600 mt-2">Le champ obligatoire `Nom de société` n&apos;est pas encore mappé.</p>
                                     )}
                                 </div>
+
+                                {/* Blocking Errors Alert in Step 3 */}
+                                {step3Attempted && validationResult?.errors && validationResult.errors.length > 0 && (
+                                    <BlockingIssuesAlert
+                                        title="Validation impossible : mapping incomplet"
+                                        errors={validationResult.errors}
+                                        warnings={validationResult.warnings}
+                                    />
+                                )}
 
                                 {/* Assistant IA de mapping */}
                                 <AiMappingAssistant
@@ -2075,10 +2195,20 @@ export default function ImportListPage() {
                             </div>
                         )}
                     </div>
+                    {step3Attempted && validationResult?.errors && validationResult.errors.length > 0 && (
+                        <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 space-y-1">
+                            <p className="font-bold flex items-center gap-1.5">
+                                <AlertCircle className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
+                                <span>{validationResult.errors.length} point(s) bloquant(s)</span>
+                            </p>
+                            <p className="text-[11px] text-rose-700">
+                                {validationResult.errors[0]}
+                            </p>
+                        </div>
+                    )}
                     <Button
                         variant="primary"
                         onClick={validateData}
-                        disabled={!requiredMapped}
                         className="w-full mt-2 gap-1.5 text-xs py-2 h-9"
                     >
                         <span>Continuer vers validation</span>
@@ -2093,12 +2223,70 @@ export default function ImportListPage() {
             {step === 4 && validationResult && (
                 <Card>
                     <div className="space-y-6">
-                        <div className="text-center py-8">
-                            <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
-                            <h2 className="text-xl font-semibold text-slate-900">Prêt pour l&apos;import</h2>
-                            <p className="text-slate-500 mt-1">
-                                {validationResult.valid} lignes valides détectées
+                        {/* If import failed previously */}
+                        {importFailureError && (
+                            <div className="rounded-2xl border border-rose-300 bg-rose-50 p-4 space-y-3">
+                                <div className="flex items-center gap-2 text-rose-800 font-bold text-sm">
+                                    <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+                                    <span>L&apos;importation a été interrompue par une erreur</span>
+                                </div>
+                                <p className="text-xs text-rose-800 font-mono bg-white/80 p-2.5 rounded-lg border border-rose-200">
+                                    {importFailureError}
+                                </p>
+                                <p className="text-xs text-slate-600">
+                                    💡 Vous pouvez corriger votre mapping ou réessayer l&apos;importation.
+                                </p>
+                                <div className="flex gap-2 pt-1">
+                                    <Button
+                                        size="sm"
+                                        variant="primary"
+                                        onClick={handleImport}
+                                        disabled={isImporting}
+                                        className="text-xs gap-1.5"
+                                    >
+                                        <RotateCcw className="w-3.5 h-3.5" />
+                                        <span>Réessayer l&apos;import</span>
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={() => setStep(3)}
+                                        className="text-xs gap-1.5"
+                                    >
+                                        <ArrowLeft className="w-3.5 h-3.5" />
+                                        <span>Modifier le mapping</span>
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="text-center py-6">
+                            <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-3 shadow-xs">
+                                <CheckCircle2 className="w-8 h-8 stroke-[2.5]" />
+                            </div>
+                            <h2 className="text-xl font-bold text-slate-900">Prêt pour l&apos;importation CRM</h2>
+                            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                                Vos données ont été vérifiées et sont prêtes à être intégrées dans Ping CRM.
                             </p>
+                        </div>
+
+                        {/* Health Check Cards */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-1">
+                                <p className="text-[10px] uppercase font-bold text-slate-400">Volume à importer</p>
+                                <p className="text-lg font-bold text-slate-900">{validationResult.valid.toLocaleString()}</p>
+                                <p className="text-[11px] text-emerald-600 font-medium">Lignes prêtes</p>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-1">
+                                <p className="text-[10px] uppercase font-bold text-slate-400">Qualité & Découpage</p>
+                                <p className="text-sm font-bold text-slate-900">RFC 4180 + E.164</p>
+                                <p className="text-[11px] text-indigo-600 font-medium">Sanitisation active</p>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-1">
+                                <p className="text-[10px] uppercase font-bold text-slate-400">Modèle ciblé</p>
+                                <p className="text-sm font-bold text-slate-900">{importType === "companies-only" ? "Sociétés" : "Sociétés + Contacts"}</p>
+                                <p className="text-[11px] text-purple-600 font-medium">{mappedCount} champs mappés</p>
+                            </div>
                         </div>
 
                         {validationResult.warnings.length > 0 && (
@@ -2106,8 +2294,8 @@ export default function ImportListPage() {
                                 <div className="flex items-start gap-3">
                                     <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                                     <div>
-                                        <p className="font-medium text-amber-700">Avertissements</p>
-                                        <ul className="text-sm text-amber-600 mt-1 space-y-1">
+                                        <p className="font-semibold text-xs text-amber-800">Points d&apos;attention (non bloquants) :</p>
+                                        <ul className="text-xs text-amber-700 mt-1 space-y-1">
                                             {validationResult.warnings.map((w, i) => (
                                                 <li key={i}>• {w}</li>
                                             ))}
@@ -2117,48 +2305,52 @@ export default function ImportListPage() {
                             </div>
                         )}
 
-                        <div className="bg-slate-50 rounded-xl p-4">
-                            <h3 className="font-medium text-slate-900 mb-2">Résumé de l&apos;import</h3>
-                            <ul className="text-sm text-slate-600 space-y-1">
-                                <li>• {importMode === "existing" ? "Liste existante: " : "Liste: "}<span className="text-slate-900 font-medium">{importMode === "existing" ? lists.find(l => l.id === listId)?.name ?? listId : listName}</span></li>
-                                <li>• Mission: <span className="text-slate-900 font-medium">{missions.find(m => m.id === missionId)?.name}</span></li>
-                                <li>• Type: <span className="text-slate-900 font-medium">
-                                    {importType === "companies-only" ? "Sociétés uniquement" : "Sociétés + Contacts"}
-                                </span></li>
-                                <li>• Fichier: <span className="text-slate-900 font-medium">{file?.name}</span></li>
-                                <li>• Lignes: <span className="text-slate-900 font-medium">{validationResult.valid}</span></li>
-                            </ul>
+                        <div className="bg-slate-50/80 rounded-xl border border-slate-200/80 p-4 space-y-2 text-xs">
+                            <h3 className="font-bold text-slate-800">Paramètres de destination :</h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-600">
+                                <div>• <strong>Liste :</strong> {importMode === "existing" ? lists.find(l => l.id === listId)?.name ?? listId : listName}</div>
+                                <div>• <strong>Mission :</strong> {missions.find(m => m.id === missionId)?.name}</div>
+                                <div>• <strong>Fichier source :</strong> {file?.name}</div>
+                                <div>• <strong>Actions historiques :</strong> {importActions ? "Activées" : "Désactivées"}</div>
+                            </div>
                         </div>
 
-                        <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-3 pt-2">
                             {isImporting && importProgress != null && (
-                                <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
-                                    <div
-                                        className="h-full bg-emerald-500 transition-all duration-300"
-                                        style={{ width: `${importProgress}%` }}
-                                    />
+                                <div className="space-y-1.5">
+                                    <div className="flex justify-between text-xs font-semibold text-slate-700">
+                                        <span>Importation des prospects dans le CRM…</span>
+                                        <span className="font-mono">{importProgress}%</span>
+                                    </div>
+                                    <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                                        <div
+                                            className="h-full bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 transition-all duration-300"
+                                            style={{ width: `${importProgress}%` }}
+                                        />
+                                    </div>
                                 </div>
                             )}
-                            <div className="flex justify-between">
+
+                            <div className="flex justify-between pt-2 border-t border-slate-100">
                                 <Button variant="ghost" onClick={() => setStep(3)} className="gap-2" disabled={isImporting}>
                                     <ArrowLeft className="w-4 h-4" />
-                                    Retour
+                                    Retour au mapping
                                 </Button>
                                 <Button
-                                    variant="success"
+                                    variant="primary"
                                     onClick={handleImport}
                                     disabled={isImporting}
-                                    className="gap-2"
+                                    className="gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shadow-emerald-600/20"
                                 >
                                     {isImporting ? (
                                         <>
                                             <Loader2 className="w-4 h-4 animate-spin" />
-                                            {importProgress != null ? `Import… ${importProgress}%` : "Import en cours…"}
+                                            <span>Import en cours… {importProgress != null ? `(${importProgress}%)` : ""}</span>
                                         </>
                                     ) : (
                                         <>
                                             <Upload className="w-4 h-4" />
-                                            Lancer l&apos;import
+                                            <span>Lancer l&apos;importation définitive</span>
                                         </>
                                     )}
                                 </Button>
@@ -2170,74 +2362,179 @@ export default function ImportListPage() {
 
             {/* Step 5: Result */}
             {step === 5 && importResult && (
-                <Card>
-                    <div className="text-center py-12">
-                        <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
-                            <Check className="w-8 h-8 text-emerald-600" />
-                        </div>
-                        <h2 className="text-xl font-semibold text-slate-900">Import terminé !</h2>
-                        <p className="text-slate-500 mt-1">
-                            {importResult.companies} sociétés et {importResult.contacts} contacts importés
-                            {importResult.actions ? ` (${importResult.actions} actions créées)` : ""}
-                        </p>
-
-                        {importResult.errors > 0 && (
-                            <div className="mt-6 max-w-lg mx-auto p-4 rounded-xl bg-rose-50 border border-rose-200 text-left shadow-sm">
-                                <div className="flex items-center gap-2 text-rose-800 font-semibold text-sm mb-1">
-                                    <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
-                                    <span>{importResult.errors} ligne{importResult.errors > 1 ? "s" : ""} n&apos;ont pas pu être importée{importResult.errors > 1 ? "s" : ""}</span>
+                <Card className="overflow-hidden border-slate-200 shadow-sm">
+                    <div className="p-6 sm:p-8 space-y-8">
+                        {/* Header Banner */}
+                        <div className="text-center max-w-xl mx-auto space-y-3">
+                            {importResult.errors === 0 ? (
+                                <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-xs ring-8 ring-emerald-50">
+                                    <CheckCircle2 className="w-9 h-9 stroke-[2.5]" />
                                 </div>
-                                <p className="text-xs text-rose-700 mb-3">
-                                    Certaines lignes présentaient des anomalies (nom de société manquant ou colonnes incomplètes).
+                            ) : (
+                                <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto shadow-xs ring-8 ring-amber-50">
+                                    <AlertCircle className="w-9 h-9 stroke-[2.5]" />
+                                </div>
+                            )}
+                            <div>
+                                <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+                                    {importResult.errors === 0 ? "Importation réussie !" : "Importation terminée avec avertissements"}
+                                </h2>
+                                <p className="text-sm text-slate-500 mt-1">
+                                    {importResult.errors === 0
+                                        ? "Toutes les données ont été traitées et intégrées avec succès dans votre espace CRM."
+                                        : `${importResult.companies + importResult.contacts} entités ont été intégrées, mais ${importResult.errors} ligne(s) ont rencontré des anomalies.`}
                                 </p>
+                            </div>
+                        </div>
+
+                        {/* KPI Metrics Grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+                            <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-50 to-white border border-slate-200/80 shadow-2xs space-y-1 text-center">
+                                <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-2">
+                                    <Building2 className="w-4 h-4" />
+                                </div>
+                                <p className="text-2xl font-extrabold text-slate-900 tracking-tight">
+                                    {importResult.companies.toLocaleString()}
+                                </p>
+                                <p className="text-xs font-semibold text-slate-500">Sociétés créées</p>
+                            </div>
+
+                            <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-50 to-white border border-slate-200/80 shadow-2xs space-y-1 text-center">
+                                <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center mx-auto mb-2">
+                                    <Users className="w-4 h-4" />
+                                </div>
+                                <p className="text-2xl font-extrabold text-slate-900 tracking-tight">
+                                    {importResult.contacts.toLocaleString()}
+                                </p>
+                                <p className="text-xs font-semibold text-slate-500">Contacts rattachés</p>
+                            </div>
+
+                            <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-50 to-white border border-slate-200/80 shadow-2xs space-y-1 text-center">
+                                <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center mx-auto mb-2">
+                                    <History className="w-4 h-4" />
+                                </div>
+                                <p className="text-2xl font-extrabold text-slate-900 tracking-tight">
+                                    {(importResult.actions ?? 0).toLocaleString()}
+                                </p>
+                                <p className="text-xs font-semibold text-slate-500">Actions d&apos;historique</p>
+                            </div>
+
+                            <div className={`p-4 rounded-2xl border shadow-2xs space-y-1 text-center ${
+                                importResult.errors > 0
+                                    ? "bg-rose-50/50 border-rose-200 text-rose-900"
+                                    : "bg-gradient-to-b from-slate-50 to-white border-slate-200/80 text-slate-900"
+                            }`}>
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-2 ${
+                                    importResult.errors > 0 ? "bg-rose-100 text-rose-600" : "bg-emerald-50 text-emerald-600"
+                                }`}>
+                                    {importResult.errors > 0 ? <AlertCircle className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                                </div>
+                                <p className={`text-2xl font-extrabold tracking-tight ${importResult.errors > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                                    {importResult.errors.toLocaleString()}
+                                </p>
+                                <p className={`text-xs font-semibold ${importResult.errors > 0 ? "text-rose-600" : "text-slate-500"}`}>
+                                    {importResult.errors > 0 ? "Lignes rejetées" : "Rejets / Erreurs"}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Destination Context Box */}
+                        <div className="p-4 rounded-2xl bg-slate-50/70 border border-slate-200/70 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                            <div className="space-y-1">
+                                <p className="font-semibold text-slate-900">
+                                    Destination : <span className="font-bold text-indigo-600">{importMode === "existing" ? lists.find(l => l.id === listId)?.name ?? listId : listName}</span>
+                                </p>
+                                <p className="text-slate-500">
+                                    Mission rattachée : <span className="text-slate-700 font-medium">{missions.find(m => m.id === missionId)?.name || "—"}</span> • Source : <span className="font-mono text-slate-600">{file?.name}</span>
+                                </p>
+                            </div>
+                            <Badge variant="primary" className="bg-white border-slate-200 text-slate-700 font-mono text-[11px] shadow-2xs">
+                                Modèle : {importType === "companies-only" ? "Sociétés uniquement" : "Sociétés & Contacts"}
+                            </Badge>
+                        </div>
+
+                        {/* Error Diagnostic Card if any */}
+                        {importResult.errors > 0 && (
+                            <div className="rounded-2xl border border-rose-200 bg-rose-50/40 p-4 sm:p-5 space-y-3 shadow-2xs">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="flex items-center gap-2 text-rose-900 font-bold text-sm">
+                                        <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                                        <span>Détail des {importResult.errors} anomalie(s) détectée(s)</span>
+                                    </div>
+                                    <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={downloadErrorsCsv}
+                                        className="text-xs gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-100 bg-white shadow-2xs flex-shrink-0"
+                                    >
+                                        <Download className="w-3.5 h-3.5" />
+                                        <span>Exporter les erreurs (.csv)</span>
+                                    </Button>
+                                </div>
+                                <p className="text-xs text-rose-700">
+                                    Ces lignes ont été ignorées durant l&apos;importation (souvent dues à un nom d&apos;entreprise vide ou un format invalide). Vos données saines ont bien été enregistrées.
+                                </p>
+
                                 {importResult.errorDetails && importResult.errorDetails.length > 0 && (
-                                    <ul className="text-xs text-rose-700 mb-3 space-y-1 list-disc pl-4 bg-white/70 p-2.5 rounded-lg border border-rose-100 max-h-36 overflow-y-auto font-mono">
-                                        {importResult.errorDetails.slice(0, 5).map((e, idx) => (
-                                            <li key={idx}>{e}</li>
+                                    <div className="rounded-xl border border-rose-200/80 bg-white/90 p-3 max-h-48 overflow-y-auto font-mono text-xs text-rose-800 space-y-1.5 shadow-inner">
+                                        {importResult.errorDetails.slice(0, 10).map((e, idx) => (
+                                            <div key={idx} className="flex items-start gap-2 py-0.5 border-b border-rose-50 last:border-0">
+                                                <span className="text-[10px] text-rose-400 font-semibold uppercase flex-shrink-0 mt-0.5">#{idx + 1}</span>
+                                                <span className="break-all">{e}</span>
+                                            </div>
                                         ))}
-                                        {importResult.errorDetails.length > 5 && (
-                                            <li className="text-slate-400 italic font-sans list-none">... et {importResult.errorDetails.length - 5} autres erreurs</li>
+                                        {importResult.errorDetails.length > 10 && (
+                                            <p className="text-slate-400 italic text-center pt-1 font-sans text-xs">
+                                                + {importResult.errorDetails.length - 10} autre(s) anomalie(s) répertoriée(s) dans le fichier CSV exportable
+                                            </p>
                                         )}
-                                    </ul>
+                                    </div>
                                 )}
-                                <Button
-                                    size="sm"
-                                    variant="secondary"
-                                    onClick={downloadErrorsCsv}
-                                    className="w-full gap-2 text-rose-700 border-rose-300 hover:bg-rose-100 bg-white"
-                                >
-                                    <Download className="w-4 h-4" />
-                                    Télécharger le rapport d&apos;erreurs CSV
-                                </Button>
                             </div>
                         )}
 
-                        <div className="flex justify-center gap-4 mt-8">
-                            <Link href="/manager/lists">
-                                <Button variant="secondary" className="gap-2">
-                                    <Table className="w-4 h-4" />
-                                    Voir les listes
-                                </Button>
-                            </Link>
+                        {/* Footer Action Buttons */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100">
                             <Button
-                                variant="primary"
+                                variant="secondary"
                                 onClick={() => {
                                     setStep(1);
                                     setFile(null);
                                     setMissionId("");
                                     setListName("");
+                                    setListId("");
                                     setCsvHeaders([]);
                                     setMappings([]);
                                     setPreviewData([]);
                                     setAssignedSdrId("");
                                     setValidationResult(null);
                                     setImportResult(null);
+                                    setMaxVisitedStep(1);
+                                    setStep1Attempted(false);
+                                    setStep3Attempted(false);
+                                    setImportFailureError(null);
                                 }}
-                                className="gap-2"
+                                className="gap-2 text-slate-600 hover:text-slate-900"
                             >
-                                <Upload className="w-4 h-4" />
-                                Nouvel import
+                                <RotateCcw className="w-4 h-4" />
+                                <span>Nouvel import CSV</span>
                             </Button>
+
+                            <div className="flex items-center gap-2">
+                                <Link href="/manager/companies">
+                                    <Button variant="secondary" className="gap-2 text-slate-700">
+                                        <Building2 className="w-4 h-4 text-slate-500" />
+                                        <span>Consulter le CRM</span>
+                                    </Button>
+                                </Link>
+                                <Link href="/manager/lists">
+                                    <Button variant="primary" className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs">
+                                        <Table className="w-4 h-4" />
+                                        <span>Accéder aux listes</span>
+                                        <ArrowRight className="w-4 h-4" />
+                                    </Button>
+                                </Link>
+                            </div>
                         </div>
                     </div>
                 </Card>
