@@ -13,6 +13,7 @@ import {
     Search,
     Command,
     ChevronRight,
+    Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "./SidebarProvider";
@@ -109,6 +110,91 @@ function NavTooltip({
             {children}
         </div>,
         document.body
+    );
+}
+
+/**
+ * Update/announcement bar pinned above the nav. A manager writes the message in
+ * Settings → Général; the API decides per-viewer whether it's visible, so a
+ * client-targeted announcement never reaches anyone else. Hovering reveals the
+ * longer "what's actually happening" detail.
+ */
+function AnnouncementBanner({ isExpanded }: { isExpanded: boolean }) {
+    const [banner, setBanner] = useState<{ message: string; details: string } | null>(null);
+    const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+    const [isPeeking, setIsPeeking] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const res = await fetch("/api/system-config/announcement-banner");
+                const json = await res.json();
+                if (cancelled) return;
+                const data = json?.data;
+                setBanner(
+                    json?.success && data?.visible
+                        ? { message: data.message ?? "", details: data.details ?? "" }
+                        : null
+                );
+            } catch {
+                if (!cancelled) setBanner(null);
+            }
+        };
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "visible") void load();
+        };
+
+        void load();
+        const interval = window.setInterval(load, 60_000);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        return () => {
+            cancelled = true;
+            window.clearInterval(interval);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+        };
+    }, []);
+
+    if (!banner?.message) return null;
+
+    return (
+        <>
+            <div
+                ref={setAnchor}
+                tabIndex={0}
+                role="status"
+                aria-label={
+                    banner.details ? `${banner.message}. ${banner.details}` : banner.message
+                }
+                onMouseEnter={() => setIsPeeking(true)}
+                onMouseLeave={() => setIsPeeking(false)}
+                onFocus={() => setIsPeeking(true)}
+                onBlur={() => setIsPeeking(false)}
+                className={cn(
+                    "mx-3 mb-1 mt-2 flex items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-400/10 text-amber-200 transition-colors hover:bg-amber-400/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50",
+                    banner.details && "cursor-help",
+                    isExpanded ? "px-2.5 py-2" : "justify-center px-0 py-2"
+                )}
+            >
+                <Megaphone className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                {isExpanded && (
+                    <span className="truncate text-[11px] font-semibold leading-tight">
+                        {banner.message}
+                    </span>
+                )}
+            </div>
+            {isPeeking && anchor && (
+                <NavTooltip anchor={anchor} variant="detailed">
+                    <div className="cp-tooltip-inner cp-tooltip-inner-detailed">
+                        <span className="cp-tooltip-detail-title">{banner.message}</span>
+                        {banner.details && (
+                            <span className="cp-tooltip-detail-desc">{banner.details}</span>
+                        )}
+                    </div>
+                </NavTooltip>
+            )}
+        </>
     );
 }
 
@@ -706,6 +792,9 @@ export function GlobalSidebar({ navigation }: GlobalSidebarProps) {
                         <X className="w-5 h-5" />
                     </button>
                 </div>
+
+                {/* Update / announcement bar */}
+                <AnnouncementBanner isExpanded={isExpanded} />
 
                 {/* Quick Search Trigger */}
                 {isExpanded ? (

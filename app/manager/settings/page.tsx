@@ -24,6 +24,16 @@ interface TemplateData {
   defaultBodyHtml: string;
 }
 
+type BannerAudience = "ALL" | "INTERNAL" | "MANAGERS" | "CLIENTS" | "CLIENT";
+
+const BANNER_AUDIENCE_OPTIONS: { value: BannerAudience; label: string; help: string }[] = [
+  { value: "ALL", label: "Tout le monde", help: "Équipe interne et clients" },
+  { value: "INTERNAL", label: "Équipe interne", help: "Managers, SDR, BD — pas les clients" },
+  { value: "MANAGERS", label: "Managers uniquement", help: "Visible seulement par les managers" },
+  { value: "CLIENTS", label: "Tous les clients", help: "Tous les comptes client, pas l'interne" },
+  { value: "CLIENT", label: "Un client spécifique", help: "Un seul compte client" },
+];
+
 // ============================================
 // TOAST
 // ============================================
@@ -165,6 +175,17 @@ export default function ManagerSettingsPage() {
   const [voipError, setVoipError] = useState<string | null>(null);
   const [voipSaved, setVoipSaved] = useState(false);
 
+  // Update banner (shown at the top of everyone's sidebar)
+  const [bannerActive, setBannerActive] = useState(false);
+  const [bannerMessage, setBannerMessage] = useState("");
+  const [bannerDetails, setBannerDetails] = useState("");
+  const [bannerAudience, setBannerAudience] = useState<BannerAudience>("ALL");
+  const [bannerClientId, setBannerClientId] = useState("");
+  const [bannerClients, setBannerClients] = useState<{ id: string; name: string }[]>([]);
+  const [bannerSaving, setBannerSaving] = useState(false);
+  const [bannerError, setBannerError] = useState<string | null>(null);
+  const [bannerSaved, setBannerSaved] = useState(false);
+
   useEffect(() => {
     setLoading(true);
     Promise.all([
@@ -173,7 +194,21 @@ export default function ManagerSettingsPage() {
       fetch("/api/system-config/leexi").then((r) => r.json()),
       fetch("/api/system-config/transactional-email").then((r) => r.json()),
       fetch("/api/system-config/voip").then((r) => r.json()),
-    ]).then(([tplRes, mpRes, leexiRes, transactionalEmailRes, voipRes]) => {
+      fetch("/api/system-config/announcement-banner").then((r) => r.json()),
+      fetch("/api/clients?limit=100").then((r) => r.json()).catch(() => null),
+    ]).then(([tplRes, mpRes, leexiRes, transactionalEmailRes, voipRes, bannerRes, clientsRes]) => {
+      if (bannerRes?.success) {
+        setBannerActive(!!bannerRes.data.active);
+        setBannerMessage(bannerRes.data.message || "");
+        setBannerDetails(bannerRes.data.details || "");
+        setBannerAudience((bannerRes.data.audience as BannerAudience) || "ALL");
+        setBannerClientId(bannerRes.data.clientId || "");
+      }
+      if (clientsRes?.success && Array.isArray(clientsRes.data)) {
+        setBannerClients(
+          clientsRes.data.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))
+        );
+      }
       if (tplRes.success) {
         setTemplate(tplRes.data);
         setSubject(tplRes.data.subject);
@@ -207,6 +242,38 @@ export default function ManagerSettingsPage() {
   const [leexiSaving, setLeexiSaving] = useState(false);
   const [leexiError, setLeexiError] = useState<string | null>(null);
   const [leexiSaved, setLeexiSaved] = useState(false);
+
+  async function handleSaveBanner(nextActive?: boolean) {
+    const active = nextActive ?? bannerActive;
+    setBannerSaving(true);
+    setBannerError(null);
+    setBannerSaved(false);
+    try {
+      const res = await fetch("/api/system-config/announcement-banner", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          active,
+          message: bannerMessage.trim(),
+          details: bannerDetails.trim(),
+          audience: bannerAudience,
+          clientId: bannerAudience === "CLIENT" ? bannerClientId : null,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setBannerActive(active);
+        setBannerSaved(true);
+        setTimeout(() => setBannerSaved(false), 2500);
+      } else {
+        setBannerError(json.error || "Impossible d'enregistrer la bannière");
+      }
+    } catch {
+      setBannerError("Erreur de connexion");
+    } finally {
+      setBannerSaving(false);
+    }
+  }
 
   async function handleSaveLeexiConfig() {
     if (!leexiKeyId || !leexiKeySecret) {
@@ -590,6 +657,147 @@ export default function ManagerSettingsPage() {
             )}
           </div>
         </div>
+
+        {/* Update banner */}
+        <Section
+          label="Bannière de mise à jour (haut de la sidebar)"
+          icon={Megaphone}
+          badge={
+            bannerActive ? (
+              <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200/80 rounded-full">
+                <Megaphone className="w-3 h-3" />
+                Active
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-slate-100 text-slate-500 rounded-full">
+                Désactivée
+              </span>
+            )
+          }
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-slate-500">
+              Affiche un bandeau en haut de la sidebar. Le message court est visible en permanence ;
+              au survol, le détail explique ce qui se passe réellement (mise à jour, incident, nouveauté).
+            </p>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">
+                Message court <span className="text-slate-400">({bannerMessage.length}/120)</span>
+              </label>
+              <input
+                type="text"
+                value={bannerMessage}
+                maxLength={120}
+                onChange={(e) => {
+                  setBannerMessage(e.target.value);
+                  setBannerError(null);
+                }}
+                placeholder="Ex : Nouvelle version — drawer de prospection amélioré"
+                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">
+                Détail au survol <span className="text-slate-400">({bannerDetails.length}/2000)</span>
+              </label>
+              <textarea
+                value={bannerDetails}
+                maxLength={2000}
+                rows={3}
+                onChange={(e) => {
+                  setBannerDetails(e.target.value);
+                  setBannerError(null);
+                }}
+                placeholder="Expliquez la vraie raison : ce qui change, pourquoi, et ce que l'équipe doit faire."
+                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent resize-none"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex-1 min-w-[220px]">
+                <label className="block text-xs font-medium text-slate-500 mb-1.5">Destinataires</label>
+                <select
+                  value={bannerAudience}
+                  onChange={(e) => {
+                    setBannerAudience(e.target.value as BannerAudience);
+                    setBannerError(null);
+                  }}
+                  className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                >
+                  {BANNER_AUDIENCE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-slate-400">
+                  {BANNER_AUDIENCE_OPTIONS.find((o) => o.value === bannerAudience)?.help}
+                </p>
+              </div>
+
+              {bannerAudience === "CLIENT" && (
+                <div className="flex-1 min-w-[220px]">
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Client</label>
+                  <select
+                    value={bannerClientId}
+                    onChange={(e) => {
+                      setBannerClientId(e.target.value);
+                      setBannerError(null);
+                    }}
+                    className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                  >
+                    <option value="">Sélectionner un client…</option>
+                    {bannerClients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Live preview of the sidebar bar */}
+            {bannerMessage.trim() && (
+              <div>
+                <p className="text-xs font-medium text-slate-500 mb-1.5">Aperçu</p>
+                <div className="rounded-xl bg-[#0f172a] p-3 max-w-xs">
+                  <div className="flex items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-2.5 py-2 text-amber-200">
+                    <Megaphone className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate text-[11px] font-semibold leading-tight">
+                      {bannerMessage}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => handleSaveBanner(true)}
+                disabled={bannerSaving || !bannerMessage.trim()}
+                className="px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-50 transition-colors"
+              >
+                {bannerSaving ? "Enregistrement…" : bannerActive ? "Mettre à jour" : "Activer la bannière"}
+              </button>
+              <button
+                onClick={() => handleSaveBanner(false)}
+                disabled={bannerSaving || !bannerActive}
+                className="px-4 py-2.5 text-sm font-medium text-slate-600 hover:text-red-600 border border-slate-200 rounded-xl hover:border-red-200 disabled:opacity-50 transition-colors"
+              >
+                Désactiver
+              </button>
+            </div>
+
+            {(bannerError || bannerSaved) && (
+              <p className={`text-sm ${bannerError ? "text-red-600" : "text-emerald-600"}`}>
+                {bannerError || "Bannière enregistrée"}
+              </p>
+            )}
+          </div>
+        </Section>
 
         {/* Master Password */}
         <Section
