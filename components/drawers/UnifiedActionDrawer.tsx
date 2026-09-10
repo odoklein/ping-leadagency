@@ -391,6 +391,14 @@ function CopyButton({ text, label }: { text: string; label: string }) {
     );
 }
 
+function SourceTag({ label }: { label: string }) {
+    return (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold leading-none bg-amber-50 text-amber-700 border border-amber-200">
+            via {label}
+        </span>
+    );
+}
+
 function StatusPill({ status }: { status: string }) {
     const cfg = (STATUS_CONFIG as Record<string, (typeof STATUS_CONFIG)["PARTIAL"] | undefined>)[status];
     if (!cfg) return null; // e.g. INCOMPLETE: intentionally not shown
@@ -917,6 +925,32 @@ export function UnifiedActionDrawer({
         if (contact?.email) return contact.email;
         return company?.contacts?.find((c) => c.email)?.email ?? null;
     }, [contact, company]);
+
+    // When the selected contact has no direct phone/email, surface the next best
+    // reachable number/address (company line, then another contact at the same company)
+    // instead of silently hiding the field.
+    const contactPhoneFallback = useMemo(() => {
+        if (!contact || contact.phone) return null;
+        if (company?.phone) return { number: company.phone, source: "Société" };
+        const other = company?.contacts?.find((c) => c.id !== contact.id && c.phone);
+        if (other) return { number: other.phone as string, source: `${other.firstName || ""} ${other.lastName || ""}`.trim() || "Autre contact" };
+        return null;
+    }, [contact, company]);
+
+    const contactEmailFallback = useMemo(() => {
+        if (!contact || contact.email) return null;
+        const other = company?.contacts?.find((c) => c.id !== contact.id && c.email);
+        if (other) return { email: other.email as string, source: `${other.firstName || ""} ${other.lastName || ""}`.trim() || "Autre contact" };
+        return null;
+    }, [contact, company]);
+
+    // When the company itself has no phone on file, surface the first contact who does.
+    const companyPhoneFallback = useMemo(() => {
+        if (!company || company.phone) return null;
+        const withPhone = company.contacts?.find((c) => c.phone);
+        if (withPhone) return { number: withPhone.phone as string, source: `${withPhone.firstName || ""} ${withPhone.lastName || ""}`.trim() || "Contact" };
+        return null;
+    }, [company]);
 
     const displayName = useMemo(() => {
         if (contact) {
@@ -2005,75 +2039,118 @@ export function UnifiedActionDrawer({
 
                             {/* Contact fields */}
                             <div>
-                                {(contact.phone || isEditingContact) && (
+                                {isEditingContact ? (
                                     <InfoRow
                                         icon={Phone}
                                         iconColor="text-emerald-600"
                                         iconBg="bg-emerald-50"
                                         label="Téléphone"
-                                        editing={isEditingContact}
-                                        action={
-                                            !isEditingContact && contact.phone ? (
-                                                <CopyButton text={contact.phone} label="Téléphone" />
-                                            ) : undefined
-                                        }
+                                        editing
                                     >
-                                        {isEditingContact ? (
-                                            <input
-                                                type="tel"
-                                                value={editContactData.phone || ""}
-                                                onChange={(e) =>
-                                                    setEditContactData({ ...editContactData, phone: e.target.value })
-                                                }
-                                                placeholder="Numéro de téléphone"
-                                                aria-label="Téléphone principal"
-                                                className="w-full mt-0.5 px-2.5 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400"
-                                            />
-                                        ) : (
+                                        <input
+                                            type="tel"
+                                            value={editContactData.phone || ""}
+                                            onChange={(e) =>
+                                                setEditContactData({ ...editContactData, phone: e.target.value })
+                                            }
+                                            placeholder="Numéro de téléphone"
+                                            aria-label="Téléphone principal"
+                                            className="w-full mt-0.5 px-2.5 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400"
+                                        />
+                                    </InfoRow>
+                                ) : contact.phone ? (
+                                    <InfoRow
+                                        icon={Phone}
+                                        iconColor="text-emerald-600"
+                                        iconBg="bg-emerald-50"
+                                        label="Téléphone"
+                                        action={<CopyButton text={contact.phone} label="Téléphone" />}
+                                    >
+                                        <a
+                                            href={`tel:${contact.phone}`}
+                                            className="text-sm font-medium text-emerald-600 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400 rounded"
+                                        >
+                                            {contact.phone}
+                                        </a>
+                                    </InfoRow>
+                                ) : contactPhoneFallback ? (
+                                    <InfoRow
+                                        icon={Phone}
+                                        iconColor="text-amber-600"
+                                        iconBg="bg-amber-50"
+                                        label="Téléphone"
+                                        action={<CopyButton text={contactPhoneFallback.number} label="Téléphone" />}
+                                    >
+                                        <div className="flex flex-wrap items-center gap-1.5">
                                             <a
-                                                href={`tel:${contact.phone}`}
+                                                href={`tel:${contactPhoneFallback.number}`}
                                                 className="text-sm font-medium text-emerald-600 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400 rounded"
                                             >
-                                                {contact.phone}
+                                                {contactPhoneFallback.number}
                                             </a>
-                                        )}
+                                            <SourceTag label={contactPhoneFallback.source} />
+                                        </div>
+                                        <p className="mt-0.5 text-[11px] text-slate-400">Pas de numéro direct pour ce contact</p>
+                                    </InfoRow>
+                                ) : (
+                                    <InfoRow icon={PhoneOff} iconColor="text-slate-300" iconBg="bg-slate-50" label="Téléphone">
+                                        <p className="text-sm text-slate-400 italic">Aucun numéro disponible</p>
                                     </InfoRow>
                                 )}
 
-                                {(contact.email || isEditingContact) && (
+                                {isEditingContact ? (
                                     <InfoRow
                                         icon={Mail}
                                         iconColor="text-indigo-600"
                                         iconBg="bg-indigo-50"
                                         label="Email"
-                                        editing={isEditingContact}
-                                        action={
-                                            !isEditingContact && contact.email ? (
-                                                <CopyButton text={contact.email} label="Email" />
-                                            ) : undefined
-                                        }
+                                        editing
                                     >
-                                        {isEditingContact ? (
-                                            <input
-                                                type="email"
-                                                value={editContactData.email || ""}
-                                                onChange={(e) =>
-                                                    setEditContactData({ ...editContactData, email: e.target.value })
-                                                }
-                                                placeholder="Adresse email"
-                                                aria-label="Email principal"
-                                                className="w-full mt-0.5 px-2.5 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400"
-                                            />
-                                        ) : (
-                                            <button
-                                                type="button"
-                                                onClick={() => setNewActionResult("ENVOIE_MAIL")}
-                                                className="text-sm font-medium text-indigo-600 hover:underline truncate block text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-400 rounded cursor-pointer"
-                                                title="Préparer un email"
-                                            >
-                                                {contact.email}
-                                            </button>
-                                        )}
+                                        <input
+                                            type="email"
+                                            value={editContactData.email || ""}
+                                            onChange={(e) =>
+                                                setEditContactData({ ...editContactData, email: e.target.value })
+                                            }
+                                            placeholder="Adresse email"
+                                            aria-label="Email principal"
+                                            className="w-full mt-0.5 px-2.5 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400"
+                                        />
+                                    </InfoRow>
+                                ) : contact.email ? (
+                                    <InfoRow
+                                        icon={Mail}
+                                        iconColor="text-indigo-600"
+                                        iconBg="bg-indigo-50"
+                                        label="Email"
+                                        action={<CopyButton text={contact.email} label="Email" />}
+                                    >
+                                        <button
+                                            type="button"
+                                            onClick={() => setNewActionResult("ENVOIE_MAIL")}
+                                            className="text-sm font-medium text-indigo-600 hover:underline truncate block text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-400 rounded cursor-pointer"
+                                            title="Préparer un email"
+                                        >
+                                            {contact.email}
+                                        </button>
+                                    </InfoRow>
+                                ) : contactEmailFallback ? (
+                                    <InfoRow
+                                        icon={Mail}
+                                        iconColor="text-amber-600"
+                                        iconBg="bg-amber-50"
+                                        label="Email"
+                                        action={<CopyButton text={contactEmailFallback.email} label="Email" />}
+                                    >
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                            <span className="text-sm font-medium text-indigo-600 truncate">{contactEmailFallback.email}</span>
+                                            <SourceTag label={contactEmailFallback.source} />
+                                        </div>
+                                        <p className="mt-0.5 text-[11px] text-slate-400">Pas d&apos;email direct pour ce contact</p>
+                                    </InfoRow>
+                                ) : (
+                                    <InfoRow icon={Mail} iconColor="text-slate-300" iconBg="bg-slate-50" label="Email">
+                                        <p className="text-sm text-slate-400 italic">Aucun email disponible</p>
                                     </InfoRow>
                                 )}
 
@@ -2500,38 +2577,62 @@ export function UnifiedActionDrawer({
 
                             {/* Company fields */}
                             <div>
-                                {(company.phone || isEditingCompany) && (
+                                {isEditingCompany ? (
                                     <InfoRow
                                         icon={Phone}
                                         iconColor="text-emerald-600"
                                         iconBg="bg-emerald-50"
                                         label="Téléphone"
-                                        editing={isEditingCompany}
-                                        action={
-                                            !isEditingCompany && company.phone ? (
-                                                <CopyButton text={company.phone} label="Téléphone société" />
-                                            ) : undefined
-                                        }
+                                        editing
                                     >
-                                        {isEditingCompany ? (
-                                            <input
-                                                type="tel"
-                                                value={editCompanyData.phone || ""}
-                                                onChange={(e) =>
-                                                    setEditCompanyData({ ...editCompanyData, phone: e.target.value })
-                                                }
-                                                placeholder="Numéro de téléphone"
-                                                aria-label="Téléphone de la société"
-                                                className="w-full mt-0.5 px-2.5 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-400/30"
-                                            />
-                                        ) : (
+                                        <input
+                                            type="tel"
+                                            value={editCompanyData.phone || ""}
+                                            onChange={(e) =>
+                                                setEditCompanyData({ ...editCompanyData, phone: e.target.value })
+                                            }
+                                            placeholder="Numéro de téléphone"
+                                            aria-label="Téléphone de la société"
+                                            className="w-full mt-0.5 px-2.5 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-400/30"
+                                        />
+                                    </InfoRow>
+                                ) : company.phone ? (
+                                    <InfoRow
+                                        icon={Phone}
+                                        iconColor="text-emerald-600"
+                                        iconBg="bg-emerald-50"
+                                        label="Téléphone"
+                                        action={<CopyButton text={company.phone} label="Téléphone société" />}
+                                    >
+                                        <a
+                                            href={`tel:${company.phone}`}
+                                            className="text-sm font-medium text-emerald-600 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400 rounded"
+                                        >
+                                            {company.phone}
+                                        </a>
+                                    </InfoRow>
+                                ) : companyPhoneFallback ? (
+                                    <InfoRow
+                                        icon={Phone}
+                                        iconColor="text-amber-600"
+                                        iconBg="bg-amber-50"
+                                        label="Téléphone"
+                                        action={<CopyButton text={companyPhoneFallback.number} label="Téléphone" />}
+                                    >
+                                        <div className="flex flex-wrap items-center gap-1.5">
                                             <a
-                                                href={`tel:${company.phone}`}
+                                                href={`tel:${companyPhoneFallback.number}`}
                                                 className="text-sm font-medium text-emerald-600 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400 rounded"
                                             >
-                                                {company.phone}
+                                                {companyPhoneFallback.number}
                                             </a>
-                                        )}
+                                            <SourceTag label={companyPhoneFallback.source} />
+                                        </div>
+                                        <p className="mt-0.5 text-[11px] text-slate-400">Pas de ligne directe société — numéro d&apos;un contact</p>
+                                    </InfoRow>
+                                ) : (
+                                    <InfoRow icon={PhoneOff} iconColor="text-slate-300" iconBg="bg-slate-50" label="Téléphone">
+                                        <p className="text-sm text-slate-400 italic">Aucun numéro disponible</p>
                                     </InfoRow>
                                 )}
 
@@ -2708,6 +2809,14 @@ export function UnifiedActionDrawer({
                                                             {c.title && (
                                                                 <p className="text-xs text-slate-400 truncate">{c.title}</p>
                                                             )}
+                                                        </div>
+                                                        <div className="flex items-center gap-1 shrink-0" aria-hidden="true">
+                                                            <Tooltip content={c.phone ? "A un numéro" : "Pas de numéro"}>
+                                                                <Phone className={cn("w-3 h-3", c.phone ? "text-emerald-500" : "text-slate-200")} />
+                                                            </Tooltip>
+                                                            <Tooltip content={c.email ? "A un email" : "Pas d'email"}>
+                                                                <Mail className={cn("w-3 h-3", c.email ? "text-indigo-500" : "text-slate-200")} />
+                                                            </Tooltip>
                                                         </div>
                                                         {expandedCompanyContactId === c.id ? (
                                                             <ChevronUp className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
