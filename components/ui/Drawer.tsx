@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -38,6 +38,10 @@ const SIZES = {
     xl: "max-w-4xl",
     full: "max-w-[95vw]",
 };
+
+// Keep in sync with .animate-slide-out-* / .animate-fade-out in globals.css — the panel
+// stays mounted for this long after isOpen flips to false so the exit animation can play.
+const EXIT_ANIMATION_MS = 160;
 
 let openModalDrawerCount = 0;
 let bodyOverflowBeforeDrawers = "";
@@ -79,6 +83,30 @@ export function Drawer({
     const drawerRef = useRef<HTMLDivElement>(null);
     const returnFocusRef = useRef<HTMLElement | null>(null);
     const portalContainer = typeof document !== "undefined" ? document.body : null;
+    const [isMounted, setIsMounted] = useState(isOpen);
+    const [isClosing, setIsClosing] = useState(false);
+    const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+
+    // Derive open/closing state during render rather than in an effect, so the exit
+    // animation starts on the same commit that isOpen flips instead of a frame later.
+    if (prevIsOpen !== isOpen) {
+        setPrevIsOpen(isOpen);
+        if (isOpen) {
+            setIsMounted(true);
+            setIsClosing(false);
+        } else if (isMounted) {
+            setIsClosing(true);
+        }
+    }
+
+    useEffect(() => {
+        if (!isClosing) return;
+        const timer = window.setTimeout(() => {
+            setIsMounted(false);
+            setIsClosing(false);
+        }, EXIT_ANIMATION_MS);
+        return () => window.clearTimeout(timer);
+    }, [isClosing]);
 
     // Handle ESC key
     const handleKeyDown = useCallback(
@@ -118,7 +146,7 @@ export function Drawer({
         }
     }, [isOpen, modal, portalContainer]);
 
-    if (!isOpen || !portalContainer) return null;
+    if (!isMounted || !portalContainer) return null;
 
     const handleOverlayClickClose = () => {
         if (closeOnOverlay) onClose();
@@ -129,7 +157,10 @@ export function Drawer({
             {/* Overlay */}
             {modal && (
                 <div
-                    className="absolute inset-0 bg-black/30 backdrop-blur-[2px] animate-fade-in cursor-pointer transition-opacity duration-300"
+                    className={cn(
+                        "absolute inset-0 bg-black/15 backdrop-blur-[1px] cursor-pointer transition-opacity duration-300",
+                        isClosing ? "animate-fade-out" : "animate-fade-in"
+                    )}
                     onClick={handleOverlayClickClose}
                     aria-hidden="true"
                 />
@@ -145,8 +176,8 @@ export function Drawer({
                 className={cn(
                     "fixed top-0 bottom-0 w-full flex flex-col bg-white shadow-2xl shadow-black/10 z-[81] outline-none",
                     side === "right"
-                        ? "right-0 animate-slide-in-right"
-                        : "left-0 animate-slide-in-left",
+                        ? cn("right-0", isClosing ? "animate-slide-out-right" : "animate-slide-in-right")
+                        : cn("left-0", isClosing ? "animate-slide-out-left" : "animate-slide-in-left"),
                     !modal && "pointer-events-auto",
                     SIZES[size],
                     className
