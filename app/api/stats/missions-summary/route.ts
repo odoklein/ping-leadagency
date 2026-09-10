@@ -50,6 +50,7 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
     const period = searchParams.get('period') || 'month';
     const startDateParam = searchParams.get('startDate');
     const endDateParam = searchParams.get('endDate');
+    const missionId = searchParams.get('missionId');
     const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10) || 20, 50);
 
     let dateFrom: Date;
@@ -78,13 +79,17 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
 
     const [missions, actionsInPeriod] = await Promise.all([
         prisma.mission.findMany({
-            where: { isActive: true },
+            where: {
+                isActive: true,
+                ...(missionId ? { id: missionId } : {}),
+            },
             take: limit,
             orderBy: { updatedAt: 'desc' },
             select: {
                 id: true,
                 name: true,
                 isActive: true,
+                objective: true,
                 client: { select: { id: true, name: true } },
                 _count: { select: { sdrAssignments: true } },
             },
@@ -95,6 +100,7 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
                     gte: dateFrom,
                     ...(endDateParam ? { lte: new Date(new Date(endDateParam).setHours(23, 59, 59, 999)) } : {}),
                 },
+                ...(missionId ? { campaign: { is: { missionId } } } : {}),
             },
             select: {
                 result: true,
@@ -124,16 +130,21 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
         }
     }
 
-    const data = missions.map((m) => ({
-        id: m.id,
-        name: m.name,
-        isActive: m.isActive,
-        client: m.client,
-        sdrCount: m._count.sdrAssignments,
-        actionsThisPeriod: byMission[m.id]?.actionsCount ?? 0,
-        meetingsThisPeriod: byMission[m.id]?.meetingsCount ?? 0,
-        lastActionAt: byMission[m.id]?.lastActionAt?.toISOString() ?? null,
-    }));
+    const FALLBACK_MEETINGS_GOAL = 20;
+    const data = missions.map((m) => {
+        const parsedObjective = parseInt(m.objective ?? '', 10);
+        return {
+            id: m.id,
+            name: m.name,
+            isActive: m.isActive,
+            client: m.client,
+            sdrCount: m._count.sdrAssignments,
+            actionsThisPeriod: byMission[m.id]?.actionsCount ?? 0,
+            meetingsThisPeriod: byMission[m.id]?.meetingsCount ?? 0,
+            meetingsGoal: !isNaN(parsedObjective) && parsedObjective > 0 ? parsedObjective : FALLBACK_MEETINGS_GOAL,
+            lastActionAt: byMission[m.id]?.lastActionAt?.toISOString() ?? null,
+        };
+    });
 
     const response = successResponse({ missions: data, period });
 

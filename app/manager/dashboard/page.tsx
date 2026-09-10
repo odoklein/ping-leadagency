@@ -32,12 +32,16 @@ interface DashboardStats {
     };
     leaderboard: { id: string; name: string; calls: number; connectedCalls: number; actions: number }[];
     rdvLeaderboard: { id: string; name: string; rdv: number; actions: number }[];
+    /** Whether Allo call metrics (calls/connectedCalls in the leaderboard) are actually wired up. */
+    alloConfigured: boolean;
+    /** Real cumulative RDV count per day of the current week (Monday-first, 7 values). */
+    weeklyTrajectory: number[];
 }
 interface MissionSummaryItem {
     id: string; name: string; isActive: boolean;
     client: { id: string; name: string };
     sdrCount: number; actionsThisPeriod: number;
-    meetingsThisPeriod: number; lastActionAt: string | null;
+    meetingsThisPeriod: number; meetingsGoal: number; lastActionAt: string | null;
 }
 interface RecentActivityItem {
     id: string; user: string; userId: string; action: string; time: string;
@@ -62,12 +66,12 @@ const EMPTY_RECENT_ACTIVITY: RecentActivityItem[] = [];
 function getInitials(name: string) {
     return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 }
-function buildWeeklyGoalData(n: number) {
+function buildWeeklyGoalData(weeklyTrajectory: number[] | undefined) {
     return DAYS.map((jour, i) => ({
         jour: jour.slice(0, 2),
         jourComplet: jour,
         objectif: Math.round((RDV_WEEKLY_GOAL / 7) * (i + 1) * 10) / 10,
-        cumul: Math.round(n * ((i + 1) / 7)),
+        cumul: weeklyTrajectory?.[i] ?? 0,
     }));
 }
 
@@ -106,10 +110,11 @@ async function fetchDashboardData(
     end: string,
     missionId: string
 ): Promise<DashboardData> {
-    const statsUrl = `/api/stats?startDate=${start}&endDate=${end}${missionId ? `&missionId=${missionId}` : ""}`;
+    const missionQueryParam = missionId ? `&missionId=${missionId}` : "";
+    const statsUrl = `/api/stats?startDate=${start}&endDate=${end}${missionQueryParam}`;
     const [statsRes, missionsRes, recentRes] = await Promise.all([
         fetch(statsUrl),
-        fetch(`/api/stats/missions-summary?startDate=${start}&endDate=${end}&limit=10`),
+        fetch(`/api/stats/missions-summary?startDate=${start}&endDate=${end}&limit=10${missionQueryParam}`),
         fetch("/api/actions/recent?limit=20"),
     ]);
     const [statsJson, missionsJson, recentJson] = await Promise.all([
@@ -153,13 +158,16 @@ export default function ManagerDashboard() {
     const missions = data?.missions ?? EMPTY_MISSIONS;
     const recentActivity = data?.recentActivity ?? EMPTY_RECENT_ACTIVITY;
 
-    const rdvGoalPct = stats ? Math.min((stats.meetingsBooked / RDV_WEEKLY_GOAL) * 100, 100) : 0;
+    // This week's real cumulative RDV count (last day of weeklyTrajectory), not the
+    // selected-period total — the card below is explicitly a weekly goal indicator.
+    const thisWeekRdv = stats?.weeklyTrajectory?.[6] ?? 0;
+    const rdvGoalPct = Math.min((thisWeekRdv / RDV_WEEKLY_GOAL) * 100, 100);
     const hotLeads = stats ? (stats.resultBreakdown.INTERESTED + stats.resultBreakdown.CALLBACK_REQUESTED) : 0;
     const callbackCount = stats?.resultBreakdown?.CALLBACK_REQUESTED ?? 0;
     const interestedCount = stats?.resultBreakdown?.INTERESTED ?? 0;
 
     const missionsNearGoal = useMemo(() => missions.filter((m) => m.isActive && m.meetingsThisPeriod > 0).sort((a, b) => b.meetingsThisPeriod - a.meetingsThisPeriod).slice(0, 5), [missions]);
-    const weeklyGoalData = useMemo(() => buildWeeklyGoalData(stats?.meetingsBooked ?? 0), [stats?.meetingsBooked]);
+    const weeklyGoalData = useMemo(() => buildWeeklyGoalData(stats?.weeklyTrajectory), [stats?.weeklyTrajectory]);
 
     const setQuickPreset = (preset: DateRangePreset) => {
         const range = getPresetRange(preset);
@@ -376,7 +384,7 @@ export default function ManagerDashboard() {
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">RDV Confirmés</p>
                         <div className="flex items-baseline gap-2 mt-1">
                             <p className="text-3xl sm:text-4xl font-black text-white tracking-tight tabular-nums">
-                                {stats?.meetingsBooked ?? 0}
+                                {thisWeekRdv}
                             </p>
                             <span className="text-xs text-slate-400 font-medium">/ {RDV_WEEKLY_GOAL} visés</span>
                         </div>
@@ -391,8 +399,8 @@ export default function ManagerDashboard() {
                             />
                         </div>
                         <div className="flex justify-between items-center text-[11px] text-slate-400">
-                            <span>Objectif hebdo</span>
-                            <span className="text-amber-300 font-bold">{stats?.meetingsBooked ?? 0} signés</span>
+                            <span>Objectif hebdo (semaine en cours)</span>
+                            <span className="text-amber-300 font-bold">{thisWeekRdv} signés</span>
                         </div>
                     </div>
                 </Link>
@@ -680,7 +688,7 @@ export default function ManagerDashboard() {
                     ) : (
                         <div className="divide-y divide-slate-100 mt-2">
                             {missionsNearGoal.map((m) => {
-                                const goal = 20;
+                                const goal = m.meetingsGoal;
                                 const pct = Math.min(100, Math.round((m.meetingsThisPeriod / goal) * 100));
                                 return (
                                     <Link
@@ -785,7 +793,13 @@ export default function ManagerDashboard() {
                                             </div>
 
                                             <p className="text-[10px] text-slate-400 mt-1">
-                                                {callStats?.calls ?? 0} appels passés · {person.actions} actions
+                                                {stats.alloConfigured ? (
+                                                    <>{callStats?.calls ?? 0} appels passés · {person.actions} actions</>
+                                                ) : (
+                                                    <span title="Intégration Allo non configurée — nombre d'appels indisponible">
+                                                        Appels — <span className="italic">non configuré</span> · {person.actions} actions
+                                                    </span>
+                                                )}
                                             </p>
                                         </div>
                                     </div>

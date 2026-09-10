@@ -202,6 +202,37 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
         }),
     ]);
 
+    // Real per-day RDV trajectory for the current calendar week (Monday-first), independent
+    // of the dashboard's selected date range — this is a fixed "this week" pulse widget, not
+    // a slice of the filtered period. Replaces client-side fabrication that used to smear the
+    // filtered-period total across 7 fake day buckets.
+    const now = new Date();
+    const currentDay = now.getDay();
+    const mondayOffset = currentDay === 0 ? 6 : currentDay - 1;
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - mondayOffset);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const weeklyActionWhere: Prisma.ActionWhereInput = {
+        ...actionWhere,
+        createdAt: { gte: weekStart, lte: weekEnd },
+        result: 'MEETING_BOOKED',
+    };
+    const weeklyMeetings = await prisma.action.findMany({
+        where: weeklyActionWhere,
+        select: { createdAt: true },
+    });
+    const dailyMeetingCounts = new Array(7).fill(0);
+    weeklyMeetings.forEach((a) => {
+        const dayIndex = (a.createdAt.getDay() + 6) % 7; // Monday=0 .. Sunday=6
+        dailyMeetingCounts[dayIndex] += 1;
+    });
+    let runningTotal = 0;
+    const weeklyTrajectory = dailyMeetingCounts.map((count) => (runningTotal += count));
+
     let rdvBySdr: { sdrId: string; _count: { _all: number } }[] = [];
     if (userRole === 'MANAGER') {
         const rdvRows = await prisma.action.findMany({
@@ -251,6 +282,9 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
 
     let leaderboard: { id: string; name: string; calls: number; connectedCalls: number; actions: number }[] = [];
     let rdvLeaderboard: { id: string; name: string; rdv: number; actions: number }[] = [];
+    // Lets the client tell "0 calls" apart from "call metrics unavailable" instead of
+    // silently rendering 0 for both when ALLO_API_KEY isn't configured.
+    const alloConfigured = userRole === 'MANAGER' && !!process.env.ALLO_API_KEY;
     const allSdrIds = [...new Set([...topSDRs.map((s) => s.sdrId), ...rdvBySdr.map((s) => s.sdrId)])];
     if (allSdrIds.length > 0) {
         const alloApiKey = process.env.ALLO_API_KEY;
@@ -334,6 +368,8 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
         resultBreakdown,
         leaderboard,
         rdvLeaderboard,
+        alloConfigured,
+        weeklyTrajectory,
         lastActivityDate,
         contactsReached,
         monthlyObjective,
