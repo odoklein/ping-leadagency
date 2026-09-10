@@ -5,6 +5,7 @@ import {
     ListChecks,
     Megaphone,
     ShieldCheck,
+    BellRing,
 } from "lucide-react";
 import { SubNav, SubNavItem } from "@/components/ui/SubNav";
 
@@ -29,6 +30,11 @@ const ITEMS: SubNavItem[] = [
         href: "/manager/settings/security-email",
         label: "Sécurité email",
         icon: ShieldCheck,
+    },
+    {
+        href: "/manager/settings/task-reminders",
+        label: "Rappels tâches",
+        icon: BellRing,
     },
 ];
 

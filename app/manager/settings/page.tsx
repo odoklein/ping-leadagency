@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   Mail, RotateCcw, Save, Eye, Info,
   CheckCircle2, AlertCircle, Sparkles, Code2,
-  ChevronRight, Zap, Variable, Key, ShieldCheck, Link2,
+  ChevronRight, Variable, Key, ShieldCheck, Link2,
   ListOrdered, Megaphone, Phone
 } from "lucide-react";
 import { RDV_TEMPLATE_VARIABLES } from "@/lib/email/templates/rdv-notification";
@@ -565,784 +565,813 @@ export default function ManagerSettingsPage() {
         textarea.code::selection { background: rgba(99,102,241,0.25); }
       `}</style>
 
-      <div className="elan-page">
+      <div className="mx-auto w-full max-w-5xl space-y-8 pb-10">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Paramètres</h1>
-          <p className="mt-1 text-sm text-slate-500">Configuration de votre espace, des statuts et des communications.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Général</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Annonces, sécurité, intégrations et templates d&apos;email de la plateforme.
+          </p>
         </div>
 
-        {/* Quick link: Statuts et catégories */}
-        <Link
-          href="/manager/settings/statuses"
-          className="group flex items-center gap-4 rounded-[12px] border border-slate-200 bg-white p-4 transition-colors hover:border-[#AFC5BF] hover:bg-[#F7F9F8]"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#EEF3F1] transition-colors group-hover:bg-[#E2ECE9]">
-            <ListOrdered className="w-5 h-5 text-[#1F4D47]" />
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">Annonces &amp; communication</h2>
+            <p className="mt-0.5 text-xs text-slate-400">Message affiché en haut de la sidebar des utilisateurs.</p>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-slate-900 group-hover:text-[#1F4D47]">Statuts et catégories de résultat</p>
-            <p className="text-sm text-slate-500">Gérer les catégories (RDV, Rappel, Intéressé…) et associer chaque statut d&apos;action à une catégorie pour les rapports et l&apos;Activité client.</p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-[#1F4D47] shrink-0" />
-        </Link>
-
-        {/* Quick link: Campagne email plateforme */}
-        <Link
-          href="/manager/settings/security-email"
-          className="group flex items-center gap-4 rounded-[12px] border border-slate-200 bg-white p-4 transition-colors hover:border-[#AFC5BF] hover:bg-[#F7F9F8]"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#EEF3F1] transition-colors group-hover:bg-[#E2ECE9]">
-            <ShieldCheck className="w-5 h-5 text-[#1F4D47]" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-slate-900 group-hover:text-[#1F4D47]">Templates emails sécurité</p>
-            <p className="text-sm text-slate-500">Configurez les templates de recuperation de mot de passe (lien) et OTP.</p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-[#1F4D47] shrink-0" />
-        </Link>
-
-        <Link
-          href="/manager/settings/task-reminders"
-          className="group flex items-center gap-4 rounded-[12px] border border-slate-200 bg-white p-4 transition-colors hover:border-[#AFC5BF] hover:bg-[#F7F9F8]"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#EEF3F1] transition-colors group-hover:bg-[#E2ECE9]">
-            <Mail className="w-5 h-5 text-[#1F4D47]" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-slate-900 group-hover:text-[#1F4D47]">Rappels email des tâches</p>
-            <p className="text-sm text-slate-500">Personnalisez le récapitulatif envoyé aux utilisateurs pour leurs tâches à venir et en retard.</p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-[#1F4D47] shrink-0" />
-        </Link>
-
-        <Link
-          href="/manager/settings/broadcast"
-          className="group flex items-center gap-4 rounded-[12px] border border-slate-200 bg-white p-4 transition-colors hover:border-[#AFC5BF] hover:bg-[#F7F9F8]"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#EEF3F1] transition-colors group-hover:bg-[#E2ECE9]">
-            <Megaphone className="w-5 h-5 text-[#1F4D47]" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-slate-900 group-hover:text-[#1F4D47]">Campagne email plateforme</p>
-            <p className="text-sm text-slate-500">Envoyez un email HTML à tous les clients, tous les commerciaux ou une sélection manuelle. Historique des campagnes inclus.</p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-[#1F4D47] shrink-0" />
-        </Link>
-
-        {/* Header */}
-        <div className="flex items-start justify-between gap-6">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 uppercase tracking-widest mb-2">
-              <Zap className="w-3.5 h-3.5" />
-              Configuration
-            </div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-              Template d&apos;email RDV
-            </h1>
-            <p className="text-sm text-slate-500 max-w-md leading-relaxed">
-              Personnalisez l&apos;email envoyé automatiquement à vos clients à chaque nouveau rendez-vous confirmé.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            {template?.isCustomized ? (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-indigo-50 text-indigo-600 border border-indigo-200/80 rounded-full">
-                <Sparkles className="w-3 h-3" />
-                Personnalisé
-              </span>
-            ) : (
-              <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-slate-100 text-slate-500 rounded-full">
-                Par défaut
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Update banner */}
-        <Section
-          label="Bannière de mise à jour (haut de la sidebar)"
-          icon={Megaphone}
-          badge={
-            bannerActive ? (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200/80 rounded-full">
-                <Megaphone className="w-3 h-3" />
-                Active
-              </span>
-            ) : (
-              <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-slate-100 text-slate-500 rounded-full">
-                Désactivée
-              </span>
-            )
-          }
-        >
           <div className="space-y-4">
-            <p className="text-sm text-slate-500">
-              Affiche un bandeau en haut de la sidebar. Le message court est visible en permanence ;
-              au survol, le détail explique ce qui se passe réellement (mise à jour, incident, nouveauté).
-            </p>
+          {/* Update banner */}
+          <Section
+            label="Bannière de mise à jour (haut de la sidebar)"
+            icon={Megaphone}
+            badge={
+              bannerActive ? (
+                <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200/80 rounded-full">
+                  <Megaphone className="w-3 h-3" />
+                  Active
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-slate-100 text-slate-500 rounded-full">
+                  Désactivée
+                </span>
+              )
+            }
+          >
+            <div className="space-y-4">
+              <p className="text-sm text-slate-500">
+                Affiche un bandeau en haut de la sidebar. Le message court est visible en permanence ;
+                au survol, le détail explique ce qui se passe réellement (mise à jour, incident, nouveauté).
+              </p>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">
-                Message court <span className="text-slate-400">({bannerMessage.length}/120)</span>
-              </label>
-              <input
-                type="text"
-                value={bannerMessage}
-                maxLength={120}
-                onChange={(e) => {
-                  setBannerMessage(e.target.value);
-                  setBannerError(null);
-                }}
-                placeholder="Ex : Nouvelle version — drawer de prospection amélioré"
-                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">
-                Détail au survol <span className="text-slate-400">({bannerDetails.length}/2000)</span>
-              </label>
-              <textarea
-                value={bannerDetails}
-                maxLength={2000}
-                rows={3}
-                onChange={(e) => {
-                  setBannerDetails(e.target.value);
-                  setBannerError(null);
-                }}
-                placeholder="Expliquez la vraie raison : ce qui change, pourquoi, et ce que l'équipe doit faire."
-                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent resize-none"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="flex-1 min-w-[220px]">
-                <label className="block text-xs font-medium text-slate-500 mb-1.5">Destinataires</label>
-                <select
-                  value={bannerAudience}
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1.5">
+                  Message court <span className="text-slate-400">({bannerMessage.length}/120)</span>
+                </label>
+                <input
+                  type="text"
+                  value={bannerMessage}
+                  maxLength={120}
                   onChange={(e) => {
-                    setBannerAudience(e.target.value as BannerAudience);
+                    setBannerMessage(e.target.value);
                     setBannerError(null);
                   }}
-                  className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
-                >
-                  {BANNER_AUDIENCE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-slate-400">
-                  {BANNER_AUDIENCE_OPTIONS.find((o) => o.value === bannerAudience)?.help}
-                </p>
+                  placeholder="Ex : Nouvelle version — drawer de prospection amélioré"
+                  className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                />
               </div>
 
-              {bannerAudience === "CLIENT" && (
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1.5">
+                  Détail au survol <span className="text-slate-400">({bannerDetails.length}/2000)</span>
+                </label>
+                <textarea
+                  value={bannerDetails}
+                  maxLength={2000}
+                  rows={3}
+                  onChange={(e) => {
+                    setBannerDetails(e.target.value);
+                    setBannerError(null);
+                  }}
+                  placeholder="Expliquez la vraie raison : ce qui change, pourquoi, et ce que l'équipe doit faire."
+                  className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent resize-none"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-end gap-3">
                 <div className="flex-1 min-w-[220px]">
-                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Client</label>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Destinataires</label>
                   <select
-                    value={bannerClientId}
+                    value={bannerAudience}
                     onChange={(e) => {
-                      setBannerClientId(e.target.value);
+                      setBannerAudience(e.target.value as BannerAudience);
                       setBannerError(null);
                     }}
                     className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
                   >
-                    <option value="">Sélectionner un client…</option>
-                    {bannerClients.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
+                    {BANNER_AUDIENCE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
                       </option>
                     ))}
                   </select>
+                  <p className="mt-1 text-xs text-slate-400">
+                    {BANNER_AUDIENCE_OPTIONS.find((o) => o.value === bannerAudience)?.help}
+                  </p>
                 </div>
-              )}
-            </div>
 
-            {/* Live preview of the sidebar bar */}
-            {bannerMessage.trim() && (
-              <div>
-                <p className="text-xs font-medium text-slate-500 mb-1.5">Aperçu</p>
-                <div className="rounded-xl bg-[#0f172a] p-3 max-w-xs">
-                  <div className="flex items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-2.5 py-2 text-amber-200">
-                    <Megaphone className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate text-[11px] font-semibold leading-tight">
-                      {bannerMessage}
-                    </span>
+                {bannerAudience === "CLIENT" && (
+                  <div className="flex-1 min-w-[220px]">
+                    <label className="block text-xs font-medium text-slate-500 mb-1.5">Client</label>
+                    <select
+                      value={bannerClientId}
+                      onChange={(e) => {
+                        setBannerClientId(e.target.value);
+                        setBannerError(null);
+                      }}
+                      className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                    >
+                      <option value="">Sélectionner un client…</option>
+                      {bannerClients.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Live preview of the sidebar bar */}
+              {bannerMessage.trim() && (
+                <div>
+                  <p className="text-xs font-medium text-slate-500 mb-1.5">Aperçu</p>
+                  <div className="rounded-xl bg-[#0f172a] p-3 max-w-xs">
+                    <div className="flex items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-2.5 py-2 text-amber-200">
+                      <Megaphone className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate text-[11px] font-semibold leading-tight">
+                        {bannerMessage}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                onClick={() => handleSaveBanner(true)}
-                disabled={bannerSaving || !bannerMessage.trim()}
-                className="px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-50 transition-colors"
-              >
-                {bannerSaving ? "Enregistrement…" : bannerActive ? "Mettre à jour" : "Activer la bannière"}
-              </button>
-              <button
-                onClick={() => handleSaveBanner(false)}
-                disabled={bannerSaving || !bannerActive}
-                className="px-4 py-2.5 text-sm font-medium text-slate-600 hover:text-red-600 border border-slate-200 rounded-xl hover:border-red-200 disabled:opacity-50 transition-colors"
-              >
-                Désactiver
-              </button>
-            </div>
-
-            {(bannerError || bannerSaved) && (
-              <p className={`text-sm ${bannerError ? "text-red-600" : "text-emerald-600"}`}>
-                {bannerError || "Bannière enregistrée"}
-              </p>
-            )}
-          </div>
-        </Section>
-
-        {/* Master Password */}
-        <Section
-          label="Mot de passe maître"
-          icon={Key}
-          badge={
-            masterPasswordEnabled === true ? (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-200/80 rounded-full">
-                <ShieldCheck className="w-3 h-3" />
-                Activé
-              </span>
-            ) : masterPasswordEnabled === false ? (
-              <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-slate-100 text-slate-500 rounded-full">
-                Désactivé
-              </span>
-            ) : null
-          }
-        >
-          <div className="space-y-4">
-            <p className="text-sm text-slate-500">
-              Un mot de passe maître permet de se connecter à n&apos;importe quel compte en utilisant son email et ce mot de passe. Utilisation interne uniquement.
-            </p>
-            {masterPasswordEnabled ? (
               <div className="flex flex-wrap items-center gap-3">
-                <div className="flex-1 min-w-[200px] max-w-md">
-                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Changer le mot de passe</label>
-                  <input
-                    type="password"
-                    value={masterPasswordValue}
-                    onChange={(e) => {
-                      setMasterPasswordValue(e.target.value);
-                      setMasterPasswordError(null);
-                    }}
-                    placeholder="Nouveau mot de passe (6+ caractères)"
-                    className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
-                  />
+                <button
+                  onClick={() => handleSaveBanner(true)}
+                  disabled={bannerSaving || !bannerMessage.trim()}
+                  className="px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-50 transition-colors"
+                >
+                  {bannerSaving ? "Enregistrement…" : bannerActive ? "Mettre à jour" : "Activer la bannière"}
+                </button>
+                <button
+                  onClick={() => handleSaveBanner(false)}
+                  disabled={bannerSaving || !bannerActive}
+                  className="px-4 py-2.5 text-sm font-medium text-slate-600 hover:text-red-600 border border-slate-200 rounded-xl hover:border-red-200 disabled:opacity-50 transition-colors"
+                >
+                  Désactiver
+                </button>
+              </div>
+
+              {(bannerError || bannerSaved) && (
+                <p className={`text-sm ${bannerError ? "text-red-600" : "text-emerald-600"}`}>
+                  {bannerError || "Bannière enregistrée"}
+                </p>
+              )}
+            </div>
+          </Section>
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">Sécurité &amp; accès</h2>
+            <p className="mt-0.5 text-xs text-slate-400">Contrôle des accès à la plateforme.</p>
+          </div>
+          <div className="space-y-4">
+          {/* Master Password */}
+          <Section
+            label="Mot de passe maître"
+            icon={Key}
+            badge={
+              masterPasswordEnabled === true ? (
+                <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-200/80 rounded-full">
+                  <ShieldCheck className="w-3 h-3" />
+                  Activé
+                </span>
+              ) : masterPasswordEnabled === false ? (
+                <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-slate-100 text-slate-500 rounded-full">
+                  Désactivé
+                </span>
+              ) : null
+            }
+          >
+            <div className="space-y-4">
+              <p className="text-sm text-slate-500">
+                Un mot de passe maître permet de se connecter à n&apos;importe quel compte en utilisant son email et ce mot de passe. Utilisation interne uniquement.
+              </p>
+              {masterPasswordEnabled ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex-1 min-w-[200px] max-w-md">
+                    <label className="block text-xs font-medium text-slate-500 mb-1.5">Changer le mot de passe</label>
+                    <input
+                      type="password"
+                      value={masterPasswordValue}
+                      onChange={(e) => {
+                        setMasterPasswordValue(e.target.value);
+                        setMasterPasswordError(null);
+                      }}
+                      placeholder="Nouveau mot de passe (6+ caractères)"
+                      className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                    />
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <button
+                      onClick={handleSetMasterPassword}
+                      disabled={masterPasswordSaving || !masterPasswordValue || masterPasswordValue.length < 6}
+                      className="px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-50 transition-colors"
+                    >
+                      {masterPasswordSaving ? "Enregistrement…" : "Mettre à jour"}
+                    </button>
+                    <button
+                      onClick={handleDisableMasterPassword}
+                      disabled={masterPasswordSaving}
+                      className="px-4 py-2.5 text-sm font-medium text-slate-600 hover:text-red-600 border border-slate-200 rounded-xl hover:border-red-200 disabled:opacity-50 transition-colors"
+                    >
+                      Désactiver
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-end gap-2">
+              ) : (
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="flex-1 min-w-[200px] max-w-md">
+                    <label className="block text-xs font-medium text-slate-500 mb-1.5">Mot de passe maître</label>
+                    <input
+                      type="password"
+                      value={masterPasswordValue}
+                      onChange={(e) => {
+                        setMasterPasswordValue(e.target.value);
+                        setMasterPasswordError(null);
+                      }}
+                      placeholder="6 caractères minimum"
+                      className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                    />
+                  </div>
                   <button
                     onClick={handleSetMasterPassword}
                     disabled={masterPasswordSaving || !masterPasswordValue || masterPasswordValue.length < 6}
                     className="px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-50 transition-colors"
                   >
-                    {masterPasswordSaving ? "Enregistrement…" : "Mettre à jour"}
+                    {masterPasswordSaving ? "Activation…" : "Activer"}
+                  </button>
+                </div>
+              )}
+              {(masterPasswordError || masterPasswordSaved) && (
+                <p className={`text-sm ${masterPasswordError ? "text-red-600" : "text-emerald-600"}`}>
+                  {masterPasswordError || "Paramètre enregistré"}
+                </p>
+              )}
+            </div>
+          </Section>
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">Intégrations &amp; téléphonie</h2>
+            <p className="mt-0.5 text-xs text-slate-400">Services externes connectés à la plateforme.</p>
+          </div>
+          <div className="space-y-4">
+          {/* Leexi API */}
+          <Section
+            label="Intégration Leexi (CR & sessions)"
+            icon={Link2}
+            badge={
+              leexiEnabled === true ? (
+                <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-200/80 rounded-full">
+                  <ShieldCheck className="w-3 h-3" />
+                  Active
+                </span>
+              ) : leexiEnabled === false ? (
+                <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-slate-100 text-slate-500 rounded-full">
+                  Inactive
+                </span>
+              ) : null
+            }
+          >
+            <div className="space-y-4">
+              <p className="text-sm text-slate-500">
+                Configurez la connexion à Leexi pour créer des sessions et compte-rendus directement depuis les transcriptions.
+                Les clés sont stockées côté serveur dans la configuration système, pas dans le navigateur.
+              </p>
+
+              {leexiSource === "env" && (
+                <div className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 flex items-start gap-2">
+                  <span className="mt-0.5">⚠️</span>
+                  <div>
+                    <p className="font-medium">Leexi est actuellement configuré via les variables d&apos;environnement.</p>
+                    <p>Vous pouvez surcharger cette configuration en enregistrant des clés ici.</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1.2fr_auto] gap-3 items-end">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">
+                    Identifiant API Leexi (KEY_ID)
+                  </label>
+                  <input
+                    type="text"
+                    value={leexiKeyId}
+                    onChange={(e) => {
+                      setLeexiKeyId(e.target.value);
+                      setLeexiError(null);
+                    }}
+                    placeholder="leexi_xxx..."
+                    className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">
+                    Secret API Leexi (KEY_SECRET)
+                  </label>
+                  <input
+                    type="password"
+                    value={leexiKeySecret}
+                    onChange={(e) => {
+                      setLeexiKeySecret(e.target.value);
+                      setLeexiError(null);
+                    }}
+                    placeholder="••••••••"
+                    className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={handleSaveLeexiConfig}
+                    disabled={leexiSaving || !leexiKeyId || !leexiKeySecret}
+                    className="px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-50 transition-colors"
+                  >
+                    {leexiSaving ? "Enregistrement…" : "Enregistrer"}
                   </button>
                   <button
-                    onClick={handleDisableMasterPassword}
-                    disabled={masterPasswordSaving}
-                    className="px-4 py-2.5 text-sm font-medium text-slate-600 hover:text-red-600 border border-slate-200 rounded-xl hover:border-red-200 disabled:opacity-50 transition-colors"
+                    onClick={handleDisableLeexiConfig}
+                    disabled={leexiSaving}
+                    className="px-4 py-2.5 text-xs font-medium text-slate-600 hover:text-red-600 border border-slate-200 rounded-xl hover:border-red-200 disabled:opacity-50 transition-colors"
                   >
                     Désactiver
                   </button>
                 </div>
               </div>
-            ) : (
+
+              {(leexiError || leexiSaved) && (
+                <p className={`text-sm ${leexiError ? "text-red-600" : "text-emerald-600"}`}>
+                  {leexiError || "Paramètres Leexi enregistrés"}
+                </p>
+              )}
+            </div>
+          </Section>
+
+          {/* Transactional email sender */}
+          <Section
+            label="Expéditeur emails transactionnels (RDV confirmé)"
+            icon={Mail}
+            badge={
+              transactionalEmailSource === "settings" ? (
+                <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-200/80 rounded-full">
+                  Personnalisé
+                </span>
+              ) : transactionalEmailSource === "env" ? (
+                <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200/80 rounded-full">
+                  Via ENV
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-slate-100 text-slate-500 rounded-full">
+                  Non configuré
+                </span>
+              )
+            }
+          >
+            <div className="space-y-4">
+              <p className="text-sm text-slate-500">
+                Adresse utilisée dans le champ <span className="font-mono">From</span> des emails transactionnels, dont l&apos;email de RDV confirmé.
+                Si vide, la plateforme utilise <span className="font-mono">SYSTEM_SMTP_FROM</span>.
+              </p>
+
               <div className="flex flex-wrap items-end gap-3">
-                <div className="flex-1 min-w-[200px] max-w-md">
-                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Mot de passe maître</label>
+                <div className="flex-1 min-w-[260px] max-w-xl">
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Adresse expéditeur</label>
                   <input
-                    type="password"
-                    value={masterPasswordValue}
+                    type="text"
+                    value={transactionalEmailFrom}
                     onChange={(e) => {
-                      setMasterPasswordValue(e.target.value);
-                      setMasterPasswordError(null);
+                      setTransactionalEmailFrom(e.target.value);
+                      setTransactionalEmailError(null);
                     }}
-                    placeholder="6 caractères minimum"
+                    placeholder='Ex: "Prospecto" <notifications@captainprospect.fr>'
                     className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
                   />
                 </div>
+
                 <button
-                  onClick={handleSetMasterPassword}
-                  disabled={masterPasswordSaving || !masterPasswordValue || masterPasswordValue.length < 6}
+                  onClick={handleSaveTransactionalEmailFrom}
+                  disabled={transactionalEmailSaving || !transactionalEmailFrom.trim()}
                   className="px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-50 transition-colors"
                 >
-                  {masterPasswordSaving ? "Activation…" : "Activer"}
+                  {transactionalEmailSaving ? "Enregistrement…" : "Enregistrer"}
+                </button>
+                <button
+                  onClick={handleResetTransactionalEmailFrom}
+                  disabled={transactionalEmailSaving || transactionalEmailSource !== "settings"}
+                  className="px-4 py-2.5 text-sm font-medium text-slate-600 hover:text-red-600 border border-slate-200 rounded-xl hover:border-red-200 disabled:opacity-50 transition-colors"
+                >
+                  Réinitialiser
                 </button>
               </div>
-            )}
-            {(masterPasswordError || masterPasswordSaved) && (
-              <p className={`text-sm ${masterPasswordError ? "text-red-600" : "text-emerald-600"}`}>
-                {masterPasswordError || "Paramètre enregistré"}
-              </p>
-            )}
-          </div>
-        </Section>
 
-        {/* Leexi API */}
-        <Section
-          label="Intégration Leexi (CR & sessions)"
-          icon={Link2}
-          badge={
-            leexiEnabled === true ? (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-200/80 rounded-full">
-                <ShieldCheck className="w-3 h-3" />
-                Active
-              </span>
-            ) : leexiEnabled === false ? (
-              <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-slate-100 text-slate-500 rounded-full">
-                Inactive
-              </span>
-            ) : null
-          }
-        >
+              {(transactionalEmailError || transactionalEmailSaved) && (
+                <p className={`text-sm ${transactionalEmailError ? "text-red-600" : "text-emerald-600"}`}>
+                  {transactionalEmailError || "Expéditeur enregistré"}
+                </p>
+              )}
+            </div>
+          </Section>
+
+          {/* Global VoIP & Telephony System */}
+          <Section
+            label="Téléphonie & VoIP Globale (WithAllo, Onoff Business, Ringover)"
+            icon={Phone}
+            badge={
+              voipStatus?.allo?.configured || voipStatus?.onoff?.configured || voipStatus?.ringover?.configured ? (
+                <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-200/80 rounded-full">
+                  <ShieldCheck className="w-3 h-3" />
+                  Configuré
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-slate-100 text-slate-500 rounded-full">
+                  Non configuré
+                </span>
+              )
+            }
+          >
+            <div className="space-y-6">
+              <p className="text-sm text-slate-500">
+                Configurez ici les clés API globales de téléphonie de l&apos;agence. Tous les SDR et Bookers utiliseront ces paramètres par défaut pour synchroniser leurs appels, durées et enregistrements RDV.
+              </p>
+
+              {/* WithAllo */}
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm text-slate-800">WithAllo (Allo)</span>
+                    {voipStatus?.allo?.configured && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                        {voipStatus.allo.source === "database" ? "En base de données" : "Via ENV"}
+                      </span>
+                    )}
+                  </div>
+                  {voipStatus?.allo?.maskedKey && (
+                    <span className="text-xs font-mono text-slate-400">{voipStatus.allo.maskedKey}</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Clé API WithAllo</label>
+                    <input
+                      type="password"
+                      value={voipAlloKey}
+                      onChange={(e) => setVoipAlloKey(e.target.value)}
+                      placeholder="Entrez une nouvelle clé API…"
+                      className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Numéros de ligne Allo (séparés par virgule)</label>
+                    <input
+                      type="text"
+                      value={voipAlloNumbers}
+                      onChange={(e) => setVoipAlloNumbers(e.target.value)}
+                      placeholder="+33123456789, +33987654321"
+                      className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Onoff Business */}
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm text-slate-800">Onoff Business</span>
+                    {voipStatus?.onoff?.configured && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                        {voipStatus.onoff.source === "database" ? "En base de données" : "Via ENV"}
+                      </span>
+                    )}
+                  </div>
+                  {voipStatus?.onoff?.maskedKey && (
+                    <span className="text-xs font-mono text-slate-400">{voipStatus.onoff.maskedKey}</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Clé API Onoff Business</label>
+                    <input
+                      type="password"
+                      value={voipOnoffKey}
+                      onChange={(e) => setVoipOnoffKey(e.target.value)}
+                      placeholder="Entrez une nouvelle clé API Onoff…"
+                      className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Numéros Onoff (séparés par virgule)</label>
+                    <input
+                      type="text"
+                      value={voipOnoffNumbers}
+                      onChange={(e) => setVoipOnoffNumbers(e.target.value)}
+                      placeholder="+33123456789, +33987654321"
+                      className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Ringover */}
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm text-slate-800">Ringover</span>
+                    {voipStatus?.ringover?.configured && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                        {voipStatus.ringover.source === "database" ? "En base de données" : "Via ENV"}
+                      </span>
+                    )}
+                  </div>
+                  {voipStatus?.ringover?.maskedKey && (
+                    <span className="text-xs font-mono text-slate-400">{voipStatus.ringover.maskedKey}</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Clé API Ringover</label>
+                    <input
+                      type="password"
+                      value={voipRingoverKey}
+                      onChange={(e) => setVoipRingoverKey(e.target.value)}
+                      placeholder="Entrez une nouvelle clé Ringover…"
+                      className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Secret Webhook Ringover</label>
+                    <input
+                      type="password"
+                      value={voipRingoverSecret}
+                      onChange={(e) => setVoipRingoverSecret(e.target.value)}
+                      placeholder="Secret de signature webhook…"
+                      className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  onClick={handleSaveVoipConfig}
+                  disabled={voipSaving}
+                  className="px-5 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-50 transition-colors shadow-sm"
+                >
+                  {voipSaving ? "Enregistrement…" : "Enregistrer la configuration VoIP globale"}
+                </button>
+              </div>
+
+              {(voipError || voipSaved) && (
+                <p className={`text-sm font-medium ${voipError ? "text-red-600" : "text-emerald-600"}`}>
+                  {voipError || "Configuration VoIP enregistrée avec succès pour toute l'équipe."}
+                </p>
+              )}
+            </div>
+          </Section>
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">Template d&apos;email RDV</h2>
+              <p className="mt-0.5 text-xs text-slate-400 max-w-xl">
+                Email envoyé automatiquement à vos clients à chaque nouveau rendez-vous confirmé.
+              </p>
+            </div>
+            <div className="shrink-0">
+              {template?.isCustomized ? (
+                <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-indigo-50 text-indigo-600 border border-indigo-200/80 rounded-full">
+                  <Sparkles className="w-3 h-3" />
+                  Personnalisé
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-slate-100 text-slate-500 rounded-full">
+                  Par défaut
+                </span>
+              )}
+            </div>
+          </div>
           <div className="space-y-4">
-            <p className="text-sm text-slate-500">
-              Configurez la connexion à Leexi pour créer des sessions et compte-rendus directement depuis les transcriptions.
-              Les clés sont stockées côté serveur dans la configuration système, pas dans le navigateur.
-            </p>
-
-            {leexiSource === "env" && (
-              <div className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 flex items-start gap-2">
-                <span className="mt-0.5">⚠️</span>
-                <div>
-                  <p className="font-medium">Leexi est actuellement configuré via les variables d&apos;environnement.</p>
-                  <p>Vous pouvez surcharger cette configuration en enregistrant des clés ici.</p>
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1.2fr_auto] gap-3 items-end">
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1.5">
-                  Identifiant API Leexi (KEY_ID)
-                </label>
-                <input
-                  type="text"
-                  value={leexiKeyId}
-                  onChange={(e) => {
-                    setLeexiKeyId(e.target.value);
-                    setLeexiError(null);
-                  }}
-                  placeholder="leexi_xxx..."
-                  className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1.5">
-                  Secret API Leexi (KEY_SECRET)
-                </label>
-                <input
-                  type="password"
-                  value={leexiKeySecret}
-                  onChange={(e) => {
-                    setLeexiKeySecret(e.target.value);
-                    setLeexiError(null);
-                  }}
-                  placeholder="••••••••"
-                  className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={handleSaveLeexiConfig}
-                  disabled={leexiSaving || !leexiKeyId || !leexiKeySecret}
-                  className="px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-50 transition-colors"
-                >
-                  {leexiSaving ? "Enregistrement…" : "Enregistrer"}
-                </button>
-                <button
-                  onClick={handleDisableLeexiConfig}
-                  disabled={leexiSaving}
-                  className="px-4 py-2.5 text-xs font-medium text-slate-600 hover:text-red-600 border border-slate-200 rounded-xl hover:border-red-200 disabled:opacity-50 transition-colors"
-                >
-                  Désactiver
-                </button>
+          {/* Subject */}
+          <Section label="Objet de l'email" icon={Mail}>
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                className="w-full px-4 py-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent font-mono bg-slate-50 text-slate-800 transition-all placeholder:text-slate-400"
+                placeholder="Ex: Votre RDV avec {{companyName}}…"
+              />
+              <div className="flex items-start gap-2 px-1">
+                <Info className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" />
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Aperçu avec données réelles :{" "}
+                  <span className="text-slate-600 font-medium italic">{previewSubject || "Aucun objet"}</span>
+                </p>
               </div>
             </div>
+          </Section>
 
-            {(leexiError || leexiSaved) && (
-              <p className={`text-sm ${leexiError ? "text-red-600" : "text-emerald-600"}`}>
-                {leexiError || "Paramètres Leexi enregistrés"}
-              </p>
-            )}
-          </div>
-        </Section>
-
-        {/* Transactional email sender */}
-        <Section
-          label="Expéditeur emails transactionnels (RDV confirmé)"
-          icon={Mail}
-          badge={
-            transactionalEmailSource === "settings" ? (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-200/80 rounded-full">
-                Personnalisé
+          {/* Variables */}
+          <Section
+            label="Variables disponibles"
+            icon={Variable}
+            badge={
+              <span className="text-[11px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                Cliquez pour insérer
               </span>
-            ) : transactionalEmailSource === "env" ? (
-              <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200/80 rounded-full">
-                Via ENV
-              </span>
-            ) : (
-              <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-slate-100 text-slate-500 rounded-full">
-                Non configuré
-              </span>
-            )
-          }
-        >
-          <div className="space-y-4">
-            <p className="text-sm text-slate-500">
-              Adresse utilisée dans le champ <span className="font-mono">From</span> des emails transactionnels, dont l&apos;email de RDV confirmé.
-              Si vide, la plateforme utilise <span className="font-mono">SYSTEM_SMTP_FROM</span>.
-            </p>
-
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="flex-1 min-w-[260px] max-w-xl">
-                <label className="block text-xs font-medium text-slate-500 mb-1.5">Adresse expéditeur</label>
-                <input
-                  type="text"
-                  value={transactionalEmailFrom}
-                  onChange={(e) => {
-                    setTransactionalEmailFrom(e.target.value);
-                    setTransactionalEmailError(null);
-                  }}
-                  placeholder='Ex: "Prospecto" <notifications@captainprospect.fr>'
-                  className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
-                />
-              </div>
-
-              <button
-                onClick={handleSaveTransactionalEmailFrom}
-                disabled={transactionalEmailSaving || !transactionalEmailFrom.trim()}
-                className="px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-50 transition-colors"
-              >
-                {transactionalEmailSaving ? "Enregistrement…" : "Enregistrer"}
-              </button>
-              <button
-                onClick={handleResetTransactionalEmailFrom}
-                disabled={transactionalEmailSaving || transactionalEmailSource !== "settings"}
-                className="px-4 py-2.5 text-sm font-medium text-slate-600 hover:text-red-600 border border-slate-200 rounded-xl hover:border-red-200 disabled:opacity-50 transition-colors"
-              >
-                Réinitialiser
-              </button>
-            </div>
-
-            {(transactionalEmailError || transactionalEmailSaved) && (
-              <p className={`text-sm ${transactionalEmailError ? "text-red-600" : "text-emerald-600"}`}>
-                {transactionalEmailError || "Expéditeur enregistré"}
-              </p>
-            )}
-          </div>
-        </Section>
-
-        {/* Global VoIP & Telephony System */}
-        <Section
-          label="Téléphonie & VoIP Globale (WithAllo, Onoff Business, Ringover)"
-          icon={Phone}
-          badge={
-            voipStatus?.allo?.configured || voipStatus?.onoff?.configured || voipStatus?.ringover?.configured ? (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-200/80 rounded-full">
-                <ShieldCheck className="w-3 h-3" />
-                Configuré
-              </span>
-            ) : (
-              <span className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-slate-100 text-slate-500 rounded-full">
-                Non configuré
-              </span>
-            )
-          }
-        >
-          <div className="space-y-6">
-            <p className="text-sm text-slate-500">
-              Configurez ici les clés API globales de téléphonie de l&apos;agence. Tous les SDR et Bookers utiliseront ces paramètres par défaut pour synchroniser leurs appels, durées et enregistrements RDV.
-            </p>
-
-            {/* WithAllo */}
-            <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-sm text-slate-800">WithAllo (Allo)</span>
-                  {voipStatus?.allo?.configured && (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-                      {voipStatus.allo.source === "database" ? "En base de données" : "Via ENV"}
-                    </span>
-                  )}
-                </div>
-                {voipStatus?.allo?.maskedKey && (
-                  <span className="text-xs font-mono text-slate-400">{voipStatus.allo.maskedKey}</span>
-                )}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Clé API WithAllo</label>
-                  <input
-                    type="password"
-                    value={voipAlloKey}
-                    onChange={(e) => setVoipAlloKey(e.target.value)}
-                    placeholder="Entrez une nouvelle clé API…"
-                    className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Numéros de ligne Allo (séparés par virgule)</label>
-                  <input
-                    type="text"
-                    value={voipAlloNumbers}
-                    onChange={(e) => setVoipAlloNumbers(e.target.value)}
-                    placeholder="+33123456789, +33987654321"
-                    className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Onoff Business */}
-            <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-sm text-slate-800">Onoff Business</span>
-                  {voipStatus?.onoff?.configured && (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-                      {voipStatus.onoff.source === "database" ? "En base de données" : "Via ENV"}
-                    </span>
-                  )}
-                </div>
-                {voipStatus?.onoff?.maskedKey && (
-                  <span className="text-xs font-mono text-slate-400">{voipStatus.onoff.maskedKey}</span>
-                )}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Clé API Onoff Business</label>
-                  <input
-                    type="password"
-                    value={voipOnoffKey}
-                    onChange={(e) => setVoipOnoffKey(e.target.value)}
-                    placeholder="Entrez une nouvelle clé API Onoff…"
-                    className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Numéros Onoff (séparés par virgule)</label>
-                  <input
-                    type="text"
-                    value={voipOnoffNumbers}
-                    onChange={(e) => setVoipOnoffNumbers(e.target.value)}
-                    placeholder="+33123456789, +33987654321"
-                    className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Ringover */}
-            <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-sm text-slate-800">Ringover</span>
-                  {voipStatus?.ringover?.configured && (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-                      {voipStatus.ringover.source === "database" ? "En base de données" : "Via ENV"}
-                    </span>
-                  )}
-                </div>
-                {voipStatus?.ringover?.maskedKey && (
-                  <span className="text-xs font-mono text-slate-400">{voipStatus.ringover.maskedKey}</span>
-                )}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Clé API Ringover</label>
-                  <input
-                    type="password"
-                    value={voipRingoverKey}
-                    onChange={(e) => setVoipRingoverKey(e.target.value)}
-                    placeholder="Entrez une nouvelle clé Ringover…"
-                    className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Secret Webhook Ringover</label>
-                  <input
-                    type="password"
-                    value={voipRingoverSecret}
-                    onChange={(e) => setVoipRingoverSecret(e.target.value)}
-                    placeholder="Secret de signature webhook…"
-                    className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                onClick={handleSaveVoipConfig}
-                disabled={voipSaving}
-                className="px-5 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-50 transition-colors shadow-sm"
-              >
-                {voipSaving ? "Enregistrement…" : "Enregistrer la configuration VoIP globale"}
-              </button>
-            </div>
-
-            {(voipError || voipSaved) && (
-              <p className={`text-sm font-medium ${voipError ? "text-red-600" : "text-emerald-600"}`}>
-                {voipError || "Configuration VoIP enregistrée avec succès pour toute l'équipe."}
-              </p>
-            )}
-          </div>
-        </Section>
-
-        {/* Subject */}
-        <Section label="Objet de l'email" icon={Mail}>
-          <div className="space-y-3">
-            <input
-              type="text"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              className="w-full px-4 py-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent font-mono bg-slate-50 text-slate-800 transition-all placeholder:text-slate-400"
-              placeholder="Ex: Votre RDV avec {{companyName}}…"
-            />
-            <div className="flex items-start gap-2 px-1">
-              <Info className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" />
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Aperçu avec données réelles :{" "}
-                <span className="text-slate-600 font-medium italic">{previewSubject || "Aucun objet"}</span>
-              </p>
-            </div>
-          </div>
-        </Section>
-
-        {/* Variables */}
-        <Section
-          label="Variables disponibles"
-          icon={Variable}
-          badge={
-            <span className="text-[11px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-              Cliquez pour insérer
-            </span>
-          }
-        >
-          <div className="flex flex-wrap gap-2">
-            {RDV_TEMPLATE_VARIABLES.map((v) => (
-              <VarChip key={v.name} variable={v} onClick={insertVariable} />
-            ))}
-          </div>
-        </Section>
-
-        {/* Editor */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white overflow-hidden shadow-sm">
-          <div className="flex items-center justify-between px-6 py-3 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
-            <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-              {[
-                { id: "editor" as const, icon: Code2, label: "Éditeur" },
-                { id: "preview" as const, icon: Eye, label: "Aperçu" },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all duration-200 ${
-                    activeTab === tab.id ? "tab-active" : "tab-inactive"
-                  }`}
-                >
-                  <tab.icon className="w-3.5 h-3.5" />
-                  {tab.label}
-                </button>
+            }
+          >
+            <div className="flex flex-wrap gap-2">
+              {RDV_TEMPLATE_VARIABLES.map((v) => (
+                <VarChip key={v.name} variable={v} onClick={insertVariable} />
               ))}
             </div>
+          </Section>
 
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-              <div className="w-2 h-2 rounded-full bg-emerald-400" />
-              HTML valide
-            </div>
-          </div>
-
-          {activeTab === "editor" ? (
-            <div className="relative">
-              <div
-                aria-hidden="true"
-                className="absolute left-0 top-0 bottom-0 w-12 bg-slate-900 text-slate-600 text-xs font-mono leading-[1.6rem] pt-3 pl-3 select-none overflow-hidden pointer-events-none"
-                style={{ fontSize: "11px" }}
-              >
-                {bodyHtml.split("\n").map((_, i) => (
-                  <div key={i}>{i + 1}</div>
+          {/* Editor */}
+          <div className="rounded-2xl border border-slate-200/80 bg-white overflow-hidden shadow-sm">
+            <div className="flex items-center justify-between px-6 py-3 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+              <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+                {[
+                  { id: "editor" as const, icon: Code2, label: "Éditeur" },
+                  { id: "preview" as const, icon: Eye, label: "Aperçu" },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all duration-200 ${
+                      activeTab === tab.id ? "tab-active" : "tab-inactive"
+                    }`}
+                  >
+                    <tab.icon className="w-3.5 h-3.5" />
+                    {tab.label}
+                  </button>
                 ))}
               </div>
-              <textarea
-                ref={textareaRef}
-                id="bodyHtmlTextarea"
-                value={bodyHtml}
-                onChange={(e) => setBodyHtml(e.target.value)}
-                rows={22}
-                spellCheck={false}
-                className="code w-full pl-14 pr-4 py-3 text-[12.5px] font-mono text-slate-200 bg-slate-900 focus:outline-none resize-none leading-[1.6rem]"
-                style={{ minHeight: 380, letterSpacing: "0.01em" }}
-              />
-            </div>
-          ) : (
-            <div className="flex flex-col" style={{ minHeight: 380 }}>
-              <div className="flex items-center gap-3 px-5 py-3 bg-slate-50 border-b border-slate-100 text-xs text-slate-500">
-                <span className="font-medium text-slate-600">De :</span>
-                <span>notifications@votreapp.fr</span>
-                <ChevronRight className="w-3 h-3 text-slate-300 mx-1" />
-                <span className="font-medium text-slate-600">Objet :</span>
-                <span className="font-medium text-slate-700 italic truncate">{previewSubject}</span>
-              </div>
-              <iframe
-                srcDoc={previewHtml}
-                title="Aperçu email"
-                className="flex-1 w-full border-0"
-                sandbox="allow-same-origin"
-                style={{ minHeight: 380, background: "#f1f5f9" }}
-              />
-            </div>
-          )}
-        </div>
 
-        {/* Action Bar */}
-        <div className="flex items-center justify-between gap-4 pt-1 pb-6">
-          <div>
-            {template?.isCustomized && (
-              <button
-                onClick={handleReset}
-                disabled={resetting}
-                className="flex items-center gap-2 text-sm text-slate-400 hover:text-red-500 font-medium transition-colors disabled:opacity-40 group"
-              >
-                <RotateCcw
-                  className="w-3.5 h-3.5 transition-transform group-hover:rotate-[-45deg] duration-300"
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                HTML valide
+              </div>
+            </div>
+
+            {activeTab === "editor" ? (
+              <div className="relative">
+                <div
+                  aria-hidden="true"
+                  className="absolute left-0 top-0 bottom-0 w-12 bg-slate-900 text-slate-600 text-xs font-mono leading-[1.6rem] pt-3 pl-3 select-none overflow-hidden pointer-events-none"
+                  style={{ fontSize: "11px" }}
+                >
+                  {bodyHtml.split("\n").map((_, i) => (
+                    <div key={i}>{i + 1}</div>
+                  ))}
+                </div>
+                <textarea
+                  ref={textareaRef}
+                  id="bodyHtmlTextarea"
+                  value={bodyHtml}
+                  onChange={(e) => setBodyHtml(e.target.value)}
+                  rows={22}
+                  spellCheck={false}
+                  className="code w-full pl-14 pr-4 py-3 text-[12.5px] font-mono text-slate-200 bg-slate-900 focus:outline-none resize-none leading-[1.6rem]"
+                  style={{ minHeight: 380, letterSpacing: "0.01em" }}
                 />
-                {resetting ? "Réinitialisation…" : "Restaurer le template par défaut"}
-              </button>
+              </div>
+            ) : (
+              <div className="flex flex-col" style={{ minHeight: 380 }}>
+                <div className="flex items-center gap-3 px-5 py-3 bg-slate-50 border-b border-slate-100 text-xs text-slate-500">
+                  <span className="font-medium text-slate-600">De :</span>
+                  <span>notifications@votreapp.fr</span>
+                  <ChevronRight className="w-3 h-3 text-slate-300 mx-1" />
+                  <span className="font-medium text-slate-600">Objet :</span>
+                  <span className="font-medium text-slate-700 italic truncate">{previewSubject}</span>
+                </div>
+                <iframe
+                  srcDoc={previewHtml}
+                  title="Aperçu email"
+                  className="flex-1 w-full border-0"
+                  sandbox="allow-same-origin"
+                  style={{ minHeight: 380, background: "#f1f5f9" }}
+                />
+              </div>
             )}
           </div>
 
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="relative flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold text-white shadow-md transition-all duration-200 disabled:opacity-60 overflow-hidden"
-            style={{
-              background: saving
-                ? "#25745f"
-                : "linear-gradient(135deg, #0c3b38 0%, #114b46 100%)",
-              boxShadow: saving ? "none" : "0 4px 14px rgba(12,59,56,0.35)",
-            }}
+          {/* Action Bar */}
+          <div className="flex items-center justify-between gap-4 pt-1 pb-6">
+            <div>
+              {template?.isCustomized && (
+                <button
+                  onClick={handleReset}
+                  disabled={resetting}
+                  className="flex items-center gap-2 text-sm text-slate-400 hover:text-red-500 font-medium transition-colors disabled:opacity-40 group"
+                >
+                  <RotateCcw
+                    className="w-3.5 h-3.5 transition-transform group-hover:rotate-[-45deg] duration-300"
+                  />
+                  {resetting ? "Réinitialisation…" : "Restaurer le template par défaut"}
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="relative flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold text-white shadow-md transition-all duration-200 disabled:opacity-60 overflow-hidden"
+              style={{
+                background: saving
+                  ? "#25745f"
+                  : "linear-gradient(135deg, #0c3b38 0%, #114b46 100%)",
+                boxShadow: saving ? "none" : "0 4px 14px rgba(12,59,56,0.35)",
+              }}
+            >
+              {saving ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  Sauvegarde…
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  Sauvegarder
+                </>
+              )}
+            </button>
+          </div>
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">Autres pages de configuration</h2>
+            <p className="mt-0.5 text-xs text-slate-400">Réglages qui vivent sur leur propre page.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+          {/* Quick link: Statuts et catégories */}
+          <Link
+            href="/manager/settings/statuses"
+            className="group flex items-center gap-4 rounded-[12px] border border-slate-200 bg-white p-4 transition-colors hover:border-[#AFC5BF] hover:bg-[#F7F9F8]"
           >
-            {saving ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                Sauvegarde…
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4" />
-                Sauvegarder
-              </>
-            )}
-          </button>
-        </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#EEF3F1] transition-colors group-hover:bg-[#E2ECE9]">
+              <ListOrdered className="w-5 h-5 text-[#1F4D47]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-slate-900 group-hover:text-[#1F4D47]">Statuts et catégories de résultat</p>
+              <p className="text-sm text-slate-500 line-clamp-2">Gérer les catégories (RDV, Rappel, Intéressé…) et associer chaque statut d&apos;action à une catégorie pour les rapports et l&apos;Activité client.</p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-[#1F4D47] shrink-0" />
+          </Link>
+
+          {/* Quick link: Campagne email plateforme */}
+          <Link
+            href="/manager/settings/security-email"
+            className="group flex items-center gap-4 rounded-[12px] border border-slate-200 bg-white p-4 transition-colors hover:border-[#AFC5BF] hover:bg-[#F7F9F8]"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#EEF3F1] transition-colors group-hover:bg-[#E2ECE9]">
+              <ShieldCheck className="w-5 h-5 text-[#1F4D47]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-slate-900 group-hover:text-[#1F4D47]">Templates emails sécurité</p>
+              <p className="text-sm text-slate-500 line-clamp-2">Configurez les templates de recuperation de mot de passe (lien) et OTP.</p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-[#1F4D47] shrink-0" />
+          </Link>
+
+          <Link
+            href="/manager/settings/task-reminders"
+            className="group flex items-center gap-4 rounded-[12px] border border-slate-200 bg-white p-4 transition-colors hover:border-[#AFC5BF] hover:bg-[#F7F9F8]"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#EEF3F1] transition-colors group-hover:bg-[#E2ECE9]">
+              <Mail className="w-5 h-5 text-[#1F4D47]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-slate-900 group-hover:text-[#1F4D47]">Rappels email des tâches</p>
+              <p className="text-sm text-slate-500 line-clamp-2">Personnalisez le récapitulatif envoyé aux utilisateurs pour leurs tâches à venir et en retard.</p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-[#1F4D47] shrink-0" />
+          </Link>
+
+          <Link
+            href="/manager/settings/broadcast"
+            className="group flex items-center gap-4 rounded-[12px] border border-slate-200 bg-white p-4 transition-colors hover:border-[#AFC5BF] hover:bg-[#F7F9F8]"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#EEF3F1] transition-colors group-hover:bg-[#E2ECE9]">
+              <Megaphone className="w-5 h-5 text-[#1F4D47]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-slate-900 group-hover:text-[#1F4D47]">Campagne email plateforme</p>
+              <p className="text-sm text-slate-500 line-clamp-2">Envoyez un email HTML à tous les clients, tous les commerciaux ou une sélection manuelle. Historique des campagnes inclus.</p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-[#1F4D47] shrink-0" />
+          </Link>
+          </div>
+        </section>
       </div>
 
       <Toast saved={saved} error={saveError} />
