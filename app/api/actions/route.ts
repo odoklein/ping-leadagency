@@ -129,13 +129,19 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
  // Build filters
  const filters: any = { page, limit };
 
- const missionId = searchParams.get('missionId');
- const result = searchParams.get('result');
- const from = searchParams.get('from');
- const to = searchParams.get('to');
- const contactId = searchParams.get('contactId');
- const companyId = searchParams.get('companyId');
- if (missionId) filters.missionId = missionId;
+    const missionId = searchParams.get('missionId');
+    const clientId = searchParams.get('clientId');
+    const channelParam = searchParams.get('channel')?.toUpperCase();
+    const result = searchParams.get('result');
+    const from = searchParams.get('from');
+    const to = searchParams.get('to');
+    const contactId = searchParams.get('contactId');
+    const companyId = searchParams.get('companyId');
+    if (missionId) filters.missionId = missionId;
+    if (clientId) filters.clientId = clientId;
+    if (channelParam && ['CALL', 'EMAIL', 'LINKEDIN'].includes(channelParam)) {
+        filters.channel = channelParam as 'CALL' | 'EMAIL' | 'LINKEDIN';
+    }
 
  // When viewing actions for a specific contact or company (drawer history),
  // show ALL actions from all team members so every role can see notes & history.

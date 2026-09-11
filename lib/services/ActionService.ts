@@ -475,98 +475,127 @@ export class ActionService {
  return mission?.teamLeadSdrId === userId;
  }
 
- // ============================================
- // GET ACTIONS WITH FILTERS
- // ============================================
- async getActions(filters: {
- sdrId?: string;
- missionId?: string;
- result?: string;
- from?: Date;
- to?: Date;
- contactId?: string;
- companyId?: string;
- page?: number;
- limit?: number;
- }) {
- const { page = 1, limit = 20, ...where } = filters;
- const skip = (page - 1) * limit;
+    // ============================================
+    // GET ACTIONS WITH FILTERS
+    // ============================================
+    async getActions(filters: {
+        sdrId?: string;
+        missionId?: string;
+        clientId?: string;
+        channel?: 'CALL' | 'EMAIL' | 'LINKEDIN';
+        result?: string;
+        from?: Date;
+        to?: Date;
+        contactId?: string;
+        companyId?: string;
+        page?: number;
+        limit?: number;
+    }) {
+        const { page = 1, limit = 20, ...where } = filters;
+        const skip = (page - 1) * limit;
 
- const whereClause: any = {};
+        const whereClause: any = {};
 
- if (where.sdrId) whereClause.sdrId = where.sdrId;
- if (where.result) whereClause.result = where.result;
- if (where.contactId) whereClause.contactId = where.contactId;
- if (where.companyId) whereClause.companyId = where.companyId;
- if (where.missionId) {
- whereClause.campaign = { missionId: where.missionId };
- }
- if (where.from || where.to) {
- whereClause.createdAt = {};
- if (where.from) whereClause.createdAt.gte = where.from;
- if (where.to) whereClause.createdAt.lte = where.to;
- }
+        if (where.sdrId) whereClause.sdrId = where.sdrId;
+        if (where.result) whereClause.result = where.result;
+        if (where.contactId) whereClause.contactId = where.contactId;
+        if (where.companyId) whereClause.companyId = where.companyId;
+        if (where.channel) whereClause.channel = where.channel;
+        if (where.missionId) {
+            whereClause.campaign = { ...(whereClause.campaign || {}), missionId: where.missionId };
+        }
+        if (where.clientId) {
+            whereClause.campaign = { ...(whereClause.campaign || {}), mission: { clientId: where.clientId } };
+        }
+        if (where.from || where.to) {
+            whereClause.createdAt = {};
+            if (where.from) whereClause.createdAt.gte = where.from;
+            if (where.to) whereClause.createdAt.lte = where.to;
+        }
 
- const [actions, total] = await Promise.all([
- prisma.action.findMany({
- where: whereClause,
- include: {
- company: true,
- contact: {
- include: { company: true },
- },
- sdr: {
- select: { id: true, name: true },
- },
- campaign: {
- select: { id: true, name: true, missionId: true },
- },
- },
- orderBy: { createdAt: 'desc' },
- skip,
- take: limit,
- }),
- prisma.action.count({ where: whereClause }),
- ]);
+        const [actions, total] = await Promise.all([
+            prisma.action.findMany({
+                where: whereClause,
+                include: {
+                    company: true,
+                    contact: {
+                        include: { company: true },
+                    },
+                    sdr: {
+                        select: { id: true, name: true },
+                    },
+                    campaign: {
+                        select: {
+                            id: true,
+                            name: true,
+                            missionId: true,
+                            mission: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    channel: true,
+                                    channels: true,
+                                    client: {
+                                        select: {
+                                            id: true,
+                                            name: true,
+                                            bookingUrl: true,
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
+            }),
+            prisma.action.count({ where: whereClause }),
+        ]);
 
- return { actions, total, page, limit };
- }
+        return { actions, total, page, limit };
+    }
 
- // ============================================
- // STATS CALCULATION
- // ============================================
- async getActionStats(filters: {
- sdrId?: string;
- missionId?: string;
- channel?: 'CALL' | 'EMAIL' | 'LINKEDIN';
- from?: Date;
- to?: Date;
- }) {
- const whereClause: any = {};
+    // ============================================
+    // STATS CALCULATION
+    // ============================================
+    async getActionStats(filters: {
+        sdrId?: string;
+        missionId?: string;
+        clientId?: string;
+        channel?: 'CALL' | 'EMAIL' | 'LINKEDIN';
+        from?: Date;
+        to?: Date;
+    }) {
+        const whereClause: any = {};
 
- if (filters.sdrId) whereClause.sdrId = filters.sdrId;
- if (filters.missionId) {
- whereClause.campaign = { missionId: filters.missionId };
- }
- if (filters.channel) whereClause.channel = filters.channel;
- if (filters.from || filters.to) {
- whereClause.createdAt = {};
- if (filters.from) whereClause.createdAt.gte = filters.from;
- if (filters.to) whereClause.createdAt.lte = filters.to;
- }
+        if (filters.sdrId) whereClause.sdrId = filters.sdrId;
+        if (filters.missionId) {
+            whereClause.campaign = { ...(whereClause.campaign || {}), missionId: filters.missionId };
+        }
+        if (filters.clientId) {
+            whereClause.campaign = { ...(whereClause.campaign || {}), mission: { clientId: filters.clientId } };
+        }
+        if (filters.channel) whereClause.channel = filters.channel;
+        if (filters.from || filters.to) {
+            whereClause.createdAt = {};
+            if (filters.from) whereClause.createdAt.gte = filters.from;
+            if (filters.to) whereClause.createdAt.lte = filters.to;
+        }
 
- const [total, byResult, avgDuration] = await Promise.all([
- prisma.action.count({ where: whereClause }),
- prisma.action.groupBy({
- by: ['result'],
- where: whereClause,
- _count: true,
- }),
- prisma.action.aggregate({
- where: { ...whereClause, duration: { not: null } },
- _avg: { duration: true },
- }),
- ]);
+        const [total, byResult, avgDuration] = await Promise.all([
+            prisma.action.count({ where: whereClause }),
+            prisma.action.groupBy({
+                by: ['result'],
+                where: whereClause,
+                _count: true,
+            }),
+            prisma.action.aggregate({
+                where: { ...whereClause, duration: { not: null } },
+                _avg: { duration: true },
+            }),
+        ]);
 
  const resultBreakdown: Record<string, number> = {};
  byResult.forEach(item => {
