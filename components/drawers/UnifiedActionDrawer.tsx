@@ -1511,848 +1511,6 @@ export function UnifiedActionDrawer({
                         </div>
                     </section>
 
-                    {/* ── History section (secondary/reference — collapsed by default) ── */}
-                    <section
-                        aria-label="Historique des actions"
-                        className="overflow-hidden rounded-[14px] border border-[#e7ecea] bg-[#fafcfb]"
-                        style={{ animation: "uadSectionIn 250ms cubic-bezier(0.16, 1, 0.3, 1)" }}
-                    >
-                        <button
-                            type="button"
-                            className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0c3b38]/20"
-                            onClick={() => setHistorySectionOpen((open) => !open)}
-                            aria-expanded={historySectionOpen}
-                            aria-controls="unified-action-history-content"
-                        >
-                            <div
-                                className="flex h-6 w-6 items-center justify-center rounded-md bg-slate-100"
-                                aria-hidden="true"
-                            >
-                                <History className="w-3 h-3 text-slate-500" />
-                            </div>
-                            <div className="min-w-0">
-                                <h2 className="text-[12px] font-semibold text-slate-600" id="history-heading">Historique</h2>
-                                <p className="text-[10px] text-slate-400">Dernières interactions</p>
-                            </div>
-                            {actionsLoading && (
-                                <div className="ml-1 w-3.5 h-3.5 rounded-full border-2 border-slate-400 border-t-transparent animate-spin" aria-hidden="true" />
-                            )}
-                            {actions.length > 0 && (
-                                <span
-                                    className="ml-auto rounded-md border border-[#d6e2de] bg-[#eef5f3] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--elan-petrol)]"
-                                    aria-label={`${actions.length} action${actions.length > 1 ? "s" : ""}`}
-                                >
-                                    {actions.length}
-                                </span>
-                            )}
-                            <ChevronDown className={cn("h-4 w-4 text-slate-400 transition-transform", historySectionOpen && "rotate-180")} aria-hidden="true" />
-                        </button>
-
-                        {historySectionOpen && (
-                            <div id="unified-action-history-content" className="border-t border-[#e7ecea] bg-white">
-                        {hasPriorCall && (
-                            <div className="mx-3 mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2">
-                                <div className="flex items-center gap-2">
-                                    <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700">
-                                        <PhoneCall className="w-3 h-3" aria-hidden="true" />
-                                        <span>Déjà appelé</span>
-                                    </div>
-                                    <p className="text-[11px] text-emerald-800">
-                                        Un ou plusieurs appels ont déjà eu lieu avec {contactId ? "ce contact" : "cette société"}.
-                                    </p>
-                                </div>
-                                {priorCallActions.length > 0 && (
-                                    <ul className="mt-1.5 space-y-0.5 text-[11px] text-emerald-800">
-                                        {priorCallActions.map((a) => (
-                                            <li key={a.id} className="flex items-center gap-1.5 flex-wrap">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
-                                                <span className="font-semibold">{renderStatusWithHint(a.result)}</span>
-                                                <span className="text-emerald-800/70">
-                                                    ·{" "}
-                                                    {new Date(a.createdAt).toLocaleDateString("fr-FR", {
-                                                        day: "2-digit",
-                                                        month: "2-digit",
-                                                    })}{" "}
-                                                    {new Date(a.createdAt).toLocaleTimeString("fr-FR", {
-                                                        hour: "2-digit",
-                                                        minute: "2-digit",
-                                                    })}
-                                                </span>
-                                                {a.sdr?.name && (
-                                                    <span className="text-emerald-800/70">
-                                                        · par <span className="font-medium">{a.sdr.name}</span>
-                                                    </span>
-                                                )}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </div>
-                        )}
-
-                        <div className="p-3" aria-live="polite">
-                            {actionsLoading ? (
-                                <div role="status" aria-label="Chargement de l'historique">
-                                    <ListSkeleton items={3} hasAvatar={false} className="py-1" />
-                                    <span className="sr-only">Chargement de l&apos;historique...</span>
-                                </div>
-                            ) : actions.length === 0 ? (
-                                <div className="flex flex-col items-center py-10 text-slate-400">
-                                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-50 border border-slate-200 flex items-center justify-center mb-3 shadow-sm">
-                                        <History className="w-6 h-6 text-slate-300" aria-hidden="true" />
-                                    </div>
-                                    <p className="text-sm font-medium text-slate-500">Aucune action enregistrée</p>
-                                    <p className="text-xs text-slate-400 mt-1 max-w-[200px] text-center leading-relaxed">
-                                        Utilisez le formulaire ci-dessous pour enregistrer votre première action
-                                    </p>
-                                </div>
-                            ) : (
-                                <>
-                                    <ol className="relative divide-y divide-[#edf1ef]" aria-label="Liste des actions">
-                                        {visibleActions.map((a) => {
-                                            const cfg =
-                                                RESULT_CHIP_CONFIG[a.result] ||
-                                                RESULT_CHIP_CONFIG.NO_RESPONSE;
-                                            const Icon = cfg.icon;
-                                            const isExpanded = expandedNotes.has(a.id);
-                                            const hasContent = !!a.note?.trim();
-
-                                            return (
-                                                <li
-                                                    key={a.id}
-                                                    className="relative py-1 pl-6 first:pt-0 last:pb-0"
-                                                >
-                                                    {/* Timeline dot */}
-                                                    <div
-                                                        className={cn(
-                                                            "absolute left-0 top-3 flex h-4 w-4 items-center justify-center rounded-md",
-                                                            cfg.dot
-                                                        )}
-                                                        aria-hidden="true"
-                                                    >
-                                                        <Icon className="w-2.5 h-2.5 text-white" />
-                                                    </div>
-
-                                                    {/* Card */}
-                                                    <div
-                                                        className={cn(
-                                                            "border-0 bg-white transition-colors duration-150"
-                                                        )}
-                                                    >
-                                                        {/* Header row — clickable if has content */}
-                                                        <button
-                                                            type="button"
-                                                            className={cn(
-                                                                "w-full flex items-center justify-between gap-3 rounded-lg px-2 py-2 text-left transition-colors",
-                                                                hasContent
-                                                                    ? "cursor-pointer hover:bg-slate-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-300"
-                                                                    : "cursor-default"
-                                                            )}
-                                                            onClick={() => hasContent && toggleNoteExpand(a.id)}
-                                                            aria-expanded={hasContent ? isExpanded : undefined}
-                                                            aria-label={
-                                                                hasContent
-                                                                    ? isExpanded
-                                                                        ? `Masquer les détails de ${statusLabels[a.result] ?? a.result}`
-                                                                        : `Voir les détails de ${statusLabels[a.result] ?? a.result}`
-                                                                    : undefined
-                                                            }
-                                                            disabled={!hasContent}
-                                                        >
-                                                            <div className="flex-1 min-w-0 space-y-1">
-                                                                <div className="flex items-center gap-1.5 flex-wrap">
-                                                                    <span
-                                                                        className={cn(
-                                                                            "text-sm font-semibold",
-                                                                            cfg.text
-                                                                        )}
-                                                                    >
-                                                                        {renderStatusWithHint(a.result)}
-                                                                    </span>
-                                                                    {a.channel && (
-                                                                        <span className={cn(
-                                                                            "inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded",
-                                                                            a.channel === "CALL" ? "bg-emerald-50 text-emerald-600" :
-                                                                            a.channel === "EMAIL" ? "bg-blue-50 text-blue-600" :
-                                                                            "bg-sky-50 text-sky-600"
-                                                                        )}>
-                                                                            {a.channel === "CALL" ? <PhoneCall className="w-2.5 h-2.5" /> :
-                                                                             a.channel === "EMAIL" ? <Mail className="w-2.5 h-2.5" /> :
-                                                                             <Linkedin className="w-2.5 h-2.5" />}
-                                                                            {a.channel === "CALL" ? "Appel" : a.channel === "EMAIL" ? "Email" : "LinkedIn"}
-                                                                        </span>
-                                                                    )}
-                                                                    {a.campaign?.name && (
-                                                                        <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md font-medium truncate max-w-[120px]">
-                                                                            {a.campaign.name}
-                                                                        </span>
-                                                                    )}
-                                                                    {a.sdr?.name && (
-                                                                        <span className="text-[10px] text-indigo-600 font-medium bg-indigo-50 px-1.5 py-0.5 rounded-md">
-                                                                            {a.sdr.name}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                                {a.callbackDate && (a.result === "MEETING_BOOKED" || isCallbackResult(a.result)) ? (
-                                                                    <div className="flex flex-col">
-                                                                        <time
-                                                                            dateTime={a.callbackDate}
-                                                                            className="text-[11px] text-indigo-500 font-semibold"
-                                                                        >
-                                                                            {a.result === "MEETING_BOOKED" ? "RDV " : "Rappel "}
-                                                                            {new Date(a.callbackDate).toLocaleDateString("fr-FR", {
-                                                                                day: "2-digit",
-                                                                                month: "short",
-                                                                                year: "numeric",
-                                                                                hour: "2-digit",
-                                                                                minute: "2-digit",
-                                                                            })}
-                                                                        </time>
-                                                                        <time
-                                                                            dateTime={a.createdAt}
-                                                                            className="text-[10px] text-slate-400"
-                                                                        >
-                                                                            créé le {new Date(a.createdAt).toLocaleDateString("fr-FR", {
-                                                                                day: "2-digit",
-                                                                                month: "short",
-                                                                            })}
-                                                                        </time>
-                                                                    </div>
-                                                                ) : (
-                                                                    <time
-                                                                        dateTime={a.createdAt}
-                                                                        className="text-[11px] text-slate-400 font-medium"
-                                                                    >
-                                                                        {new Date(a.createdAt).toLocaleDateString("fr-FR", {
-                                                                            day: "2-digit",
-                                                                            month: "short",
-                                                                            year: "numeric",
-                                                                            hour: "2-digit",
-                                                                            minute: "2-digit",
-                                                                        })}
-                                                                    </time>
-                                                                )}
-                                                            </div>
-                                                            {hasContent && (
-                                                                <ChevronDown
-                                                                    className={cn(
-                                                                        "w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200",
-                                                                        isExpanded && "rotate-180"
-                                                                    )}
-                                                                    aria-hidden="true"
-                                                                />
-                                                            )}
-                                                        </button>
-
-                                                        {/* Expandable note content */}
-                                                        {hasContent && isExpanded && (
-                                                            <div className="px-3.5 pb-3.5 pt-0 border-t border-slate-100 space-y-2">
-                                                                {a.note && (
-                                                                    <p className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed pt-2">
-                                                                        {a.note}
-                                                                    </p>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </li>
-                                            );
-                                        })}
-                                    </ol>
-
-                                    {/* Show more / less */}
-                                    {actions.length > 5 && (
-                                        <button
-                                            type="button"
-                                            onClick={() => setHistoryExpanded((v) => !v)}
-                                            className="mt-3 w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 py-2.5 rounded-xl bg-indigo-50/40 hover:bg-indigo-50 border border-indigo-100 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 hover:border-indigo-200 active:scale-[0.99]"
-                                        >
-                                            {historyExpanded ? (
-                                                <>
-                                                    <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
-                                                    Voir moins
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
-                                                    Voir {actions.length - 5} action{actions.length - 5 > 1 ? "s" : ""} de plus
-                                                </>
-                                            )}
-                                        </button>
-                                    )}
-                                </>
-                            )}
-                        </div>
-                            </div>
-                        )}
-                    </section>
-
-                    {/* ── Record Action Section (primary task — highest-contrast section in the drawer) ── */}
-                    <section
-                        aria-label="Enregistrer une action"
-                        className="overflow-hidden rounded-[18px] border-2 border-[#0c3b38]/15 bg-white shadow-[0_20px_44px_-28px_rgba(12,59,56,0.55)]"
-                        style={{ animation: "uadSectionIn 250ms 150ms cubic-bezier(0.16, 1, 0.3, 1) both" }}
-                    >
-                        <div className="flex items-center gap-2.5 bg-[var(--elan-petrol)] px-3.5 py-3">
-                            <div
-                                className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/15"
-                                aria-hidden="true"
-                            >
-                                <MessageSquare className="w-3.5 h-3.5 text-white" />
-                            </div>
-                            <h2 className="text-sm font-bold text-white" id="record-action-heading">Enregistrer une action</h2>
-                            {newActionResult && (
-                                <span className="ml-auto text-[10px] font-semibold text-white bg-white/15 border border-white/20 px-2 py-0.5 rounded-full">
-                                    {statusLabels[newActionResult] ?? newActionResult}
-                                </span>
-                            )}
-                        </div>
-
-                        <div className="p-4">
-                            {campaignsLoading ? (
-                                <div className="space-y-3 py-2">
-                                    <TextSkeleton lines={1} className="h-9 w-full" />
-                                    <TextSkeleton lines={2} />
-                                </div>
-                            ) : campaigns.length === 0 ? (
-                                <p className="text-sm text-slate-500 py-4 text-center">
-                                    Aucune campagne disponible pour cette mission.
-                                </p>
-                            ) : (
-                                <div className="space-y-4">
-                                    {/* Outcome chips */}
-                                    <fieldset>
-                                        <legend className="text-xs font-bold text-slate-700 mb-2.5 uppercase tracking-wider flex items-center gap-1.5">
-                                            Résultat <span className="text-red-500" aria-hidden="true">*</span>
-                                            <span className="sr-only">(obligatoire)</span>
-                                        </legend>
-                                        <div
-                                            className="flex flex-wrap gap-2"
-                                            role="radiogroup"
-                                            aria-label="Sélectionnez le résultat de l'action"
-                                            aria-required="true"
-                                        >
-                                            {statusOptions.map((opt) => {
-                                                const cfg =
-                                                    RESULT_CHIP_CONFIG[opt.value] ||
-                                                    RESULT_CHIP_CONFIG.NO_RESPONSE;
-                                                const Icon = cfg.icon;
-                                                const isSelected = newActionResult === opt.value;
-                                                const chipButton = (
-                                                    <button
-                                                        key={opt.value}
-                                                        type="button"
-                                                        role="radio"
-                                                        aria-checked={isSelected}
-                                                        onClick={() => {
-                                                            setNewActionResult(opt.value);
-                                                            if (opt.value === "MEETING_BOOKED" && canOpenBookingFlow) {
-                                                                setShowBookingDrawer(true);
-                                                            }
-                                                        }}
-                                                        className={cn(
-                                                            "flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1",
-                                                            isSelected
-                                                                ? cn(
-                                                                    cfg.selectedBg,
-                                                                    cfg.selectedText,
-                                                                    cfg.selectedBorder,
-                                                                    "ring-1 shadow-sm scale-[1.02]",
-                                                                    `focus-visible:ring-${cfg.dot.replace("bg-", "")}`
-                                                                )
-                                                                : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50 hover:shadow-sm active:scale-[0.98]"
-                                                        )}
-                                                    >
-                                                        <Icon
-                                                            className={cn("w-3.5 h-3.5 shrink-0", isSelected ? cfg.selectedText : "text-slate-400")}
-                                                            aria-hidden="true"
-                                                        />
-                                                        {opt.label}
-                                                    </button>
-                                                );
-                                                if (!opt.title) return chipButton;
-                                                return (
-                                                    <Tooltip
-                                                        key={`${opt.value}-tooltip`}
-                                                        position="top"
-                                                        maxWidth="max-w-sm"
-                                                        content={
-                                                            <div className="space-y-1">
-                                                                {opt.title.split("\n").map((line, idx) => (
-                                                                    <p key={`${opt.value}-${idx}`} className="text-xs leading-relaxed">
-                                                                        {line}
-                                                                    </p>
-                                                                ))}
-                                                            </div>
-                                                        }
-                                                    >
-                                                        {chipButton}
-                                                    </Tooltip>
-                                                );
-                                            })}
-                                        </div>
-                                    </fieldset>
-
-                                    {/* ── Inline email panel: mailbox + template + edit-before-send ── */}
-                                    {newActionResult === "ENVOIE_MAIL" && (
-                                        <div className="rounded-xl border border-[#CBD8D4] bg-[#F7F9F8] p-3.5 space-y-3">
-                                            <div className="flex items-center gap-2 mb-0.5">
-                                                <div className="w-6 h-6 rounded-lg bg-[#1F4D47] flex items-center justify-center">
-                                                    <Mail className="w-3.5 h-3.5 text-white" aria-hidden="true" />
-                                                </div>
-                                                <span className="text-sm font-semibold text-[#1F4D47]">Envoyer un email</span>
-                                                {missionName && <span className="text-xs text-slate-400 truncate">· {missionName}</span>}
-                                            </div>
-
-                                            {/* Recipient display */}
-                                            {contact?.email ? (
-                                                <div className="flex items-center gap-2 text-xs text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-2">
-                                                    <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                                    <span className="font-medium text-slate-700">À :</span>
-                                                    <span className="truncate">{contact.email}</span>
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                                                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                                                    Ce contact n&apos;a pas d&apos;adresse email enregistrée
-                                                </div>
-                                            )}
-
-                                            {/* Mailbox selector — defaults to the mission's attached mailbox */}
-                                            <div>
-                                                <label className="block text-xs font-semibold text-slate-600 mb-1">Boîte d&apos;envoi <span className="text-red-500">*</span></label>
-                                                {emailMailboxesLoading ? (
-                                                    <div className="flex items-center gap-2 text-xs text-slate-500 py-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Chargement...</div>
-                                                ) : emailMailboxes.length === 0 ? (
-                                                    <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
-                                                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                                                        Aucune boîte mail configurée
-                                                    </div>
-                                                ) : (
-                                                    <select
-                                                        value={emailSelectedMailboxId}
-                                                        onChange={e => setEmailSelectedMailboxId(e.target.value)}
-                                                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1F4D47]/25 focus:border-[#1F4D47]"
-                                                    >
-                                                        {emailMailboxes.map(mb => (
-                                                            <option key={mb.id} value={mb.id}>
-                                                                {mb.displayName ? `${mb.displayName} <${mb.email}>` : mb.email}
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                )}
-                                            </div>
-
-                                            {/* Template selector */}
-                                            <div>
-                                                <label className="block text-xs font-semibold text-slate-600 mb-1">Template <span className="text-red-500">*</span></label>
-                                                {emailTemplatesLoading ? (
-                                                    <div className="flex items-center gap-2 text-xs text-slate-500 py-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Chargement des templates...</div>
-                                                ) : emailTemplates.length === 0 ? (
-                                                    <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
-                                                        <FileText className="w-3.5 h-3.5 shrink-0" />
-                                                        Aucun template assigné à cette mission
-                                                    </div>
-                                                ) : (
-                                                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-0.5 email-scrollbar">
-                                                        {emailTemplates.map(mt => {
-                                                            const isSelected = (emailSelectedTemplateId || emailTemplates[0]?.templateId) === mt.templateId;
-                                                            const catColors: Record<string, string> = {
-                                                                OUTREACH: "bg-[#EDF4F2] text-[#1F4D47]",
-                                                                FOLLOW_UP: "bg-amber-100 text-amber-700",
-                                                                NURTURE: "bg-violet-100 text-violet-700",
-                                                                CLOSING: "bg-emerald-100 text-emerald-700",
-                                                                OTHER: "bg-slate-100 text-slate-600",
-                                                            };
-                                                            return (
-                                                                <div
-                                                                    key={mt.id}
-                                                                    role="button"
-                                                                    tabIndex={0}
-                                                                    onClick={() => setEmailSelectedTemplateId(mt.templateId)}
-                                                                    onKeyDown={e => e.key === "Enter" && setEmailSelectedTemplateId(mt.templateId)}
-                                                                    className={cn(
-                                                                        "flex items-start gap-2.5 px-3 py-2 rounded-lg border cursor-pointer transition-all",
-                                                                        isSelected
-                                                                            ? "border-[#1F4D47] bg-[#EDF4F2] ring-1 ring-[#1F4D47]/30"
-                                                                            : "border-slate-200 bg-white hover:border-[#9DBBB4] hover:bg-[#F1F4F3]"
-                                                                    )}
-                                                                >
-                                                                    <div className={cn("mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-all", isSelected ? "border-[#1F4D47] bg-[#1F4D47]" : "border-slate-300")}>
-                                                                        {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                                                                    </div>
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <div className="flex items-center gap-2 flex-wrap">
-                                                                            <span className="text-sm font-medium text-slate-800 truncate">{mt.template.name}</span>
-                                                                            <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0", catColors[mt.template.category] ?? catColors.OTHER)}>
-                                                                                {mt.template.category}
-                                                                            </span>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Rendered preview + edit-before-send */}
-                                            {chosenEmailTemplate && (
-                                                <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
-                                                    <div className="flex items-center justify-between gap-2 bg-[#F1F4F3] border-b border-slate-200 px-3 py-1.5">
-                                                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                                                            <Eye className="w-3.5 h-3.5" />
-                                                            {emailIsEditing ? "Édition" : "Aperçu"}
-                                                            <span className="text-slate-300">·</span>
-                                                            <span className="text-[10px]">variables remplies avec ce contact</span>
-                                                        </div>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setEmailIsEditing(v => !v)}
-                                                            className={cn(
-                                                                "flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md transition-colors",
-                                                                emailIsEditing ? "text-white bg-[#1F4D47] hover:bg-[#173A35]" : "text-[#1F4D47] hover:bg-[#EDF4F2]"
-                                                            )}
-                                                        >
-                                                            <Edit3 className="w-3 h-3" />
-                                                            {emailIsEditing ? "Terminé" : "Modifier"}
-                                                        </button>
-                                                    </div>
-
-                                                    {/* Subject */}
-                                                    <div className="px-3 py-2 border-b border-slate-100">
-                                                        {emailIsEditing ? (
-                                                            <input
-                                                                type="text"
-                                                                value={emailEditSubject}
-                                                                onChange={e => setEmailEditSubject(e.target.value)}
-                                                                placeholder="Objet"
-                                                                className="w-full text-sm font-medium text-slate-800 bg-transparent focus:outline-none"
-                                                            />
-                                                        ) : (
-                                                            <p className="text-sm font-medium text-slate-800">
-                                                                <span className="text-slate-400 font-normal">Objet : </span>
-                                                                {emailEditSubject || <span className="text-slate-400 italic">(vide)</span>}
-                                                            </p>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Body */}
-                                                    {emailIsEditing ? (
-                                                        <div
-                                                            contentEditable
-                                                            suppressContentEditableWarning
-                                                            onInput={e => setEmailEditBody(e.currentTarget.innerHTML)}
-                                                            className="p-3 max-h-56 overflow-y-auto text-sm text-slate-700 focus:outline-none email-scrollbar"
-                                                            style={{ fontFamily: "Arial, sans-serif", fontSize: "13px", lineHeight: "1.55" }}
-                                                            dangerouslySetInnerHTML={{ __html: emailEditBody }}
-                                                        />
-                                                    ) : (
-                                                        <div
-                                                            className="p-3 max-h-56 overflow-y-auto text-sm text-slate-700 email-scrollbar"
-                                                            style={{ fontFamily: "Arial, sans-serif", fontSize: "13px", lineHeight: "1.55" }}
-                                                            dangerouslySetInnerHTML={{ __html: stripScripts(highlightVariables(chosenEmailTemplate.bodyHtml, emailVariables)) }}
-                                                        />
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {/* Send buttons */}
-                                            <div className="flex gap-2 pt-1 border-t border-[#CBD8D4]">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleSendEmailAndRecord(false)}
-                                                    disabled={sendEmailMutation.isPending || !contact?.email || !emailSelectedMailboxId || !getChosenTemplateId()}
-                                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-[#1F4D47] hover:bg-[#173A35] disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-colors"
-                                                >
-                                                    {sendEmailMutation.isPending ? (
-                                                        <><Loader2 className="w-4 h-4 animate-spin" /> Envoi...</>
-                                                    ) : (
-                                                        <><Send className="w-4 h-4" /> Envoyer l&apos;email</>
-                                                    )}
-                                                </button>
-                                                {onValidateAndNext && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleSendEmailAndRecord(true)}
-                                                        disabled={sendEmailMutation.isPending || !contact?.email || !emailSelectedMailboxId || !getChosenTemplateId()}
-                                                        className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-[#1F4D47] bg-[#EDF4F2] hover:bg-[#DDE9E5] disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-colors"
-                                                    >
-                                                        {sendEmailMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
-                                                        Envoyer &amp; Suivant
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Contextual: callback date */}
-                                    {isCallbackResult(newActionResult) && (
-                                        <div
-                                            role="group"
-                                            aria-label="Date de rappel"
-                                            className="rounded-xl border border-amber-200 bg-amber-50/50 p-3.5"
-                                        >
-                                            <DateTimePicker
-                                                label="Date de rappel"
-                                                value={newCallbackDateValue}
-                                                onChange={setNewCallbackDateValue}
-                                                placeholder="Choisir date et heure du rappel…"
-                                                triggerClassName="border-amber-200 focus:ring-amber-400/40 focus:border-amber-400"
-                                            />
-                                            <p className="text-xs text-slate-500 mt-1.5 flex items-center gap-1">
-                                                <Clock className="w-3.5 h-3.5 text-amber-600" />
-                                                Optionnel. Vous pouvez aussi indiquer la date dans la note.
-                                            </p>
-                                        </div>
-                                    )}
-
-                                    {/* Contextual: meeting booking — always shown for MEETING_BOOKED */}
-                                    {newActionResult === "MEETING_BOOKED" && (
-                                        <div className="rounded-xl border border-[#B9D0CB] bg-[#F3F7F6] p-3.5 space-y-3">
-                                            {canOpenBookingFlow ? (
-                                                <>
-                                                    <div className="flex items-start gap-2.5">
-                                                        <Calendar className="mt-0.5 h-4 w-4 shrink-0 text-[#1F4D47]" aria-hidden="true" />
-                                                        <div>
-                                                            <p className="text-sm font-semibold text-[#173C37]">Rendez-vous en 2 étapes</p>
-                                                            <p className="mt-0.5 text-xs leading-relaxed text-slate-600">
-                                                                1. Données CRM&nbsp;&nbsp;·&nbsp;&nbsp;2. Créneau dans le calendrier
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <Button
-                                                        type="button"
-                                                        variant="secondary"
-                                                        onClick={() => setShowBookingDrawer(true)}
-                                                        className="w-full gap-2 border-[#8FB2AA] text-[#1F4D47] hover:bg-white"
-                                                    >
-                                                        <Calendar className="w-4 h-4" aria-hidden="true" />
-                                                        Reprendre la planification
-                                                    </Button>
-                                                </>
-                                            ) : (
-                                                <p className="text-xs leading-relaxed text-amber-800">
-                                                    Aucun calendrier de réservation n’est configuré pour ce client.
-                                                </p>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {newActionResult === "MAUVAIS_INTERLOCUTEUR" && (
-                                        <div className="rounded-xl border border-rose-200 bg-rose-50/40 p-3.5 space-y-3">
-                                            <div className="flex items-start gap-2">
-                                                <Info className="w-4 h-4 text-rose-600 mt-0.5" aria-hidden="true" />
-                                                <div>
-                                                    <p className="text-sm font-semibold text-rose-800">Ajouter le bon contact</p>
-                                                    <p className="text-xs text-rose-700/90">
-                                                        Renseignez les informations du bon interlocuteur puis enregistrez-le.
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                                <input
-                                                    value={newInterlocutorContact.firstName}
-                                                    onChange={(e) => {
-                                                        setInterlocutorContactSaved(false);
-                                                        setNewInterlocutorContact((prev) => ({ ...prev, firstName: e.target.value }));
-                                                    }}
-                                                    placeholder="Prénom"
-                                                    className="w-full px-3 py-2 text-sm border border-rose-200 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400"
-                                                />
-                                                <input
-                                                    value={newInterlocutorContact.lastName}
-                                                    onChange={(e) => {
-                                                        setInterlocutorContactSaved(false);
-                                                        setNewInterlocutorContact((prev) => ({ ...prev, lastName: e.target.value }));
-                                                    }}
-                                                    placeholder="Nom"
-                                                    className="w-full px-3 py-2 text-sm border border-rose-200 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400"
-                                                />
-                                                <input
-                                                    value={newInterlocutorContact.phone}
-                                                    onChange={(e) => {
-                                                        setInterlocutorContactSaved(false);
-                                                        setNewInterlocutorContact((prev) => ({ ...prev, phone: e.target.value }));
-                                                    }}
-                                                    placeholder="Téléphone"
-                                                    className="w-full px-3 py-2 text-sm border border-rose-200 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400"
-                                                />
-                                                <input
-                                                    type="email"
-                                                    value={newInterlocutorContact.email}
-                                                    onChange={(e) => {
-                                                        setInterlocutorContactSaved(false);
-                                                        setNewInterlocutorContact((prev) => ({ ...prev, email: e.target.value }));
-                                                    }}
-                                                    placeholder="Email"
-                                                    className="w-full px-3 py-2 text-sm border border-rose-200 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400"
-                                                />
-                                            </div>
-                                            <div className="flex items-center justify-between gap-2">
-                                                <p className="text-[11px] text-rose-700/80">
-                                                    Renseignez au moins un nom (prénom/nom) et un canal (téléphone/email).
-                                                </p>
-                                                <Button
-                                                    type="button"
-                                                    variant="secondary"
-                                                    onClick={() => createInterlocutorContactMutation.mutate()}
-                                                    disabled={!canCreateInterlocutorContact}
-                                                    isLoading={createInterlocutorContactMutation.isPending}
-                                                    className="gap-2 shrink-0 border-rose-300 text-rose-700 hover:bg-rose-100"
-                                                >
-                                                    <Save className="w-4 h-4" aria-hidden="true" />
-                                                    Sauvegarder le contact
-                                                </Button>
-                                            </div>
-                                            {requiresSavedInterlocutorBeforeSubmit && (
-                                                <p className="text-[11px] text-rose-700">
-                                                    Sauvegardez d&apos;abord le nouveau contact pour pouvoir enregistrer l&apos;action.
-                                                </p>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* Note */}
-                                    {newActionResult !== "ENVOIE_MAIL" && (
-                                    <div>
-                                        <label
-                                            htmlFor="action-note"
-                                            className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider"
-                                        >
-                                            {isRefusalResult ? "Raison du refus" : isOutOfTargetResult ? "Raison du hors cible" : "Note"}
-                                            {textFieldRequiredForResult && (
-                                                <span className="text-red-500 ml-1" aria-hidden="true">*</span>
-                                            )}
-                                            {textFieldRequiredForResult && (
-                                                <span className="sr-only"> (obligatoire)</span>
-                                            )}
-                                        </label>
-                                        <div className="relative">
-                                            <textarea
-                                                id="action-note"
-                                                ref={noteRef}
-                                                value={newActionNote}
-                                                onChange={(e) => setNewActionNote(e.target.value)}
-                                                placeholder={notePlaceholder}
-                                                rows={3}
-                                                maxLength={500}
-                                                aria-required={textFieldRequiredForResult}
-                                                aria-describedby="note-char-count"
-                                                className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400 resize-none transition-all"
-                                            />
-                                        </div>
-                                        {linkedAlloCall && (
-                                            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-50 border border-emerald-200 mt-2">
-                                                <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                                                    <PhoneCall className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex flex-wrap items-center gap-2">
-                                                        <span className="text-xs font-semibold text-emerald-800">Appel Allo validé</span>
-                                                        {linkedAlloCall.duration > 0 && (
-                                                            <span className="text-[11px] text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded-md font-medium">
-                                                                {Math.floor(linkedAlloCall.duration / 60)}m{linkedAlloCall.duration % 60}s
-                                                            </span>
-                                                        )}
-                                                        {linkedAlloCall.outcome && (
-                                                            <span className="text-[11px] text-slate-500">{linkedAlloCall.outcome}</span>
-                                                        )}
-                                                    </div>
-                                                    {linkedAlloCall.summary && (
-                                                        <p className="text-xs text-emerald-700 mt-1 line-clamp-2">{linkedAlloCall.summary}</p>
-                                                    )}
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setLinkedAlloCall(null)}
-                                                    className="w-6 h-6 rounded flex items-center justify-center text-emerald-400 hover:text-emerald-700 transition-colors flex-shrink-0"
-                                                    title="Retirer le lien"
-                                                    aria-label="Retirer l'appel Allo sélectionné"
-                                                >
-                                                    <XCircle className="w-4 h-4" aria-hidden="true" />
-                                                </button>
-                                            </div>
-                                        )}
-                                        <div className="flex items-center justify-between gap-2 mt-1.5 flex-wrap">
-                                            <button
-                                                type="button"
-                                                onClick={handleImproveNote}
-                                                disabled={newActionNote.trim().length < MIN_NOTE_LENGTH_FOR_AI_ENHANCE || improveNoteMutation.isPending}
-                                                aria-label="Améliorer la note avec l'IA"
-                                                className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-400 rounded-lg px-2 py-1 hover:bg-indigo-50 border border-transparent hover:border-indigo-100"
-                                            >
-                                                {improveNoteMutation.isPending ? (
-                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
-                                                ) : (
-                                                    <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
-                                                )}
-                                                {improveNoteMutation.isPending ? "Amélioration…" : "Améliorer avec l'IA"}
-                                            </button>
-                                            {isCallCampaign && (
-                                                <button
-                                                    type="button"
-                                                    onClick={openAlloDialog}
-                                                    className={cn(
-                                                        "flex items-center gap-1.5 text-xs font-semibold rounded-lg px-2.5 py-1 border transition-all",
-                                                        linkedAlloCall
-                                                            ? "text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100"
-                                                            : "text-indigo-600 bg-indigo-50 border-indigo-100 hover:bg-indigo-100"
-                                                    )}
-                                                >
-                                                    <PhoneCall className="w-3.5 h-3.5" aria-hidden="true" />
-                                                    {linkedAlloCall ? "Appel validé ✓" : "Valider l'appel (Allo)"}
-                                                </button>
-                                            )}
-                                            <p
-                                                id="note-char-count"
-                                                className="text-xs text-slate-400 ml-auto"
-                                                aria-live="polite"
-                                                aria-atomic="true"
-                                            >
-                                                {newActionNote.length}/500
-                                            </p>
-                                        </div>
-                                    </div>
-                                    )}
-
-                                    {newActionResult !== "ENVOIE_MAIL" && (
-                                    <div className="sticky -bottom-4 z-10 -mx-4 flex flex-col gap-2 border-t border-[#dfe7e3] bg-white/95 px-4 pb-1 pt-3 shadow-[0_-12px_28px_-24px_rgba(12,59,56,0.45)] backdrop-blur sm:flex-row">
-                                        <Button
-                                            type="button"
-                                            variant="primary"
-                                            onClick={() => handleAddAction(false)}
-                                            disabled={!canSubmit}
-                                            isLoading={addActionMutation.isPending}
-                                            className={cn(
-                                                "gap-2 shadow-sm transition-all duration-200",
-                                                canSubmit && "hover:shadow-md hover:scale-[1.01]",
-                                                onValidateAndNext ? "flex-1" : "w-full"
-                                            )}
-                                        >
-                                            <Check className="w-4 h-4" aria-hidden="true" />
-                                            Enregistrer
-                                        </Button>
-                                        {onValidateAndNext && (
-                                            <Button
-                                                type="button"
-                                                variant="secondary"
-                                                onClick={() => handleAddAction(true)}
-                                                disabled={!canSubmit}
-                                                isLoading={addActionMutation.isPending}
-                                                className="gap-2 flex-1 shadow-sm"
-                                            >
-                                                <ChevronRight className="w-4 h-4" aria-hidden="true" />
-                                                Valider & suivant
-                                            </Button>
-                                        )}
-                                    </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    </section>
-
                     {/* ── Tab Navigation ── */}
                     {contact && (
                         <p className="px-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">
@@ -3405,6 +2563,849 @@ export function UnifiedActionDrawer({
                             </div>
                         </section>
                     )}
+
+                    {/* ── History section (secondary/reference — collapsed by default) ── */}
+                    <section
+                        aria-label="Historique des actions"
+                        className="overflow-hidden rounded-[14px] border border-[#e7ecea] bg-[#fafcfb]"
+                        style={{ animation: "uadSectionIn 250ms cubic-bezier(0.16, 1, 0.3, 1)" }}
+                    >
+                        <button
+                            type="button"
+                            className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0c3b38]/20"
+                            onClick={() => setHistorySectionOpen((open) => !open)}
+                            aria-expanded={historySectionOpen}
+                            aria-controls="unified-action-history-content"
+                        >
+                            <div
+                                className="flex h-6 w-6 items-center justify-center rounded-md bg-slate-100"
+                                aria-hidden="true"
+                            >
+                                <History className="w-3 h-3 text-slate-500" />
+                            </div>
+                            <div className="min-w-0">
+                                <h2 className="text-[12px] font-semibold text-slate-600" id="history-heading">Historique</h2>
+                                <p className="text-[10px] text-slate-400">Dernières interactions</p>
+                            </div>
+                            {actionsLoading && (
+                                <div className="ml-1 w-3.5 h-3.5 rounded-full border-2 border-slate-400 border-t-transparent animate-spin" aria-hidden="true" />
+                            )}
+                            {actions.length > 0 && (
+                                <span
+                                    className="ml-auto rounded-md border border-[#d6e2de] bg-[#eef5f3] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--elan-petrol)]"
+                                    aria-label={`${actions.length} action${actions.length > 1 ? "s" : ""}`}
+                                >
+                                    {actions.length}
+                                </span>
+                            )}
+                            <ChevronDown className={cn("h-4 w-4 text-slate-400 transition-transform", historySectionOpen && "rotate-180")} aria-hidden="true" />
+                        </button>
+
+                        {historySectionOpen && (
+                            <div id="unified-action-history-content" className="border-t border-[#e7ecea] bg-white">
+                        {hasPriorCall && (
+                            <div className="mx-3 mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2">
+                                <div className="flex items-center gap-2">
+                                    <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700">
+                                        <PhoneCall className="w-3 h-3" aria-hidden="true" />
+                                        <span>Déjà appelé</span>
+                                    </div>
+                                    <p className="text-[11px] text-emerald-800">
+                                        Un ou plusieurs appels ont déjà eu lieu avec {contactId ? "ce contact" : "cette société"}.
+                                    </p>
+                                </div>
+                                {priorCallActions.length > 0 && (
+                                    <ul className="mt-1.5 space-y-0.5 text-[11px] text-emerald-800">
+                                        {priorCallActions.map((a) => (
+                                            <li key={a.id} className="flex items-center gap-1.5 flex-wrap">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                                                <span className="font-semibold">{renderStatusWithHint(a.result)}</span>
+                                                <span className="text-emerald-800/70">
+                                                    ·{" "}
+                                                    {new Date(a.createdAt).toLocaleDateString("fr-FR", {
+                                                        day: "2-digit",
+                                                        month: "2-digit",
+                                                    })}{" "}
+                                                    {new Date(a.createdAt).toLocaleTimeString("fr-FR", {
+                                                        hour: "2-digit",
+                                                        minute: "2-digit",
+                                                    })}
+                                                </span>
+                                                {a.sdr?.name && (
+                                                    <span className="text-emerald-800/70">
+                                                        · par <span className="font-medium">{a.sdr.name}</span>
+                                                    </span>
+                                                )}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="p-3" aria-live="polite">
+                            {actionsLoading ? (
+                                <div role="status" aria-label="Chargement de l'historique">
+                                    <ListSkeleton items={3} hasAvatar={false} className="py-1" />
+                                    <span className="sr-only">Chargement de l&apos;historique...</span>
+                                </div>
+                            ) : actions.length === 0 ? (
+                                <div className="flex flex-col items-center py-10 text-slate-400">
+                                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-50 border border-slate-200 flex items-center justify-center mb-3 shadow-sm">
+                                        <History className="w-6 h-6 text-slate-300" aria-hidden="true" />
+                                    </div>
+                                    <p className="text-sm font-medium text-slate-500">Aucune action enregistrée</p>
+                                    <p className="text-xs text-slate-400 mt-1 max-w-[200px] text-center leading-relaxed">
+                                        Utilisez le formulaire ci-dessous pour enregistrer votre première action
+                                    </p>
+                                </div>
+                            ) : (
+                                <>
+                                    <ol className="relative divide-y divide-[#edf1ef]" aria-label="Liste des actions">
+                                        {visibleActions.map((a) => {
+                                            const cfg =
+                                                RESULT_CHIP_CONFIG[a.result] ||
+                                                RESULT_CHIP_CONFIG.NO_RESPONSE;
+                                            const Icon = cfg.icon;
+                                            const isExpanded = expandedNotes.has(a.id);
+                                            const hasContent = !!a.note?.trim();
+
+                                            return (
+                                                <li
+                                                    key={a.id}
+                                                    className="relative py-1 pl-6 first:pt-0 last:pb-0"
+                                                >
+                                                    {/* Timeline dot */}
+                                                    <div
+                                                        className={cn(
+                                                            "absolute left-0 top-3 flex h-4 w-4 items-center justify-center rounded-md",
+                                                            cfg.dot
+                                                        )}
+                                                        aria-hidden="true"
+                                                    >
+                                                        <Icon className="w-2.5 h-2.5 text-white" />
+                                                    </div>
+
+                                                    {/* Card */}
+                                                    <div
+                                                        className={cn(
+                                                            "border-0 bg-white transition-colors duration-150"
+                                                        )}
+                                                    >
+                                                        {/* Header row — clickable if has content */}
+                                                        <button
+                                                            type="button"
+                                                            className={cn(
+                                                                "w-full flex items-center justify-between gap-3 rounded-lg px-2 py-2 text-left transition-colors",
+                                                                hasContent
+                                                                    ? "cursor-pointer hover:bg-slate-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-300"
+                                                                    : "cursor-default"
+                                                            )}
+                                                            onClick={() => hasContent && toggleNoteExpand(a.id)}
+                                                            aria-expanded={hasContent ? isExpanded : undefined}
+                                                            aria-label={
+                                                                hasContent
+                                                                    ? isExpanded
+                                                                        ? `Masquer les détails de ${statusLabels[a.result] ?? a.result}`
+                                                                        : `Voir les détails de ${statusLabels[a.result] ?? a.result}`
+                                                                    : undefined
+                                                            }
+                                                            disabled={!hasContent}
+                                                        >
+                                                            <div className="flex-1 min-w-0 space-y-1">
+                                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                                    <span
+                                                                        className={cn(
+                                                                            "text-sm font-semibold",
+                                                                            cfg.text
+                                                                        )}
+                                                                    >
+                                                                        {renderStatusWithHint(a.result)}
+                                                                    </span>
+                                                                    {a.channel && (
+                                                                        <span className={cn(
+                                                                            "inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded",
+                                                                            a.channel === "CALL" ? "bg-emerald-50 text-emerald-600" :
+                                                                            a.channel === "EMAIL" ? "bg-blue-50 text-blue-600" :
+                                                                            "bg-sky-50 text-sky-600"
+                                                                        )}>
+                                                                            {a.channel === "CALL" ? <PhoneCall className="w-2.5 h-2.5" /> :
+                                                                             a.channel === "EMAIL" ? <Mail className="w-2.5 h-2.5" /> :
+                                                                             <Linkedin className="w-2.5 h-2.5" />}
+                                                                            {a.channel === "CALL" ? "Appel" : a.channel === "EMAIL" ? "Email" : "LinkedIn"}
+                                                                        </span>
+                                                                    )}
+                                                                    {a.campaign?.name && (
+                                                                        <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md font-medium truncate max-w-[120px]">
+                                                                            {a.campaign.name}
+                                                                        </span>
+                                                                    )}
+                                                                    {a.sdr?.name && (
+                                                                        <span className="text-[10px] text-indigo-600 font-medium bg-indigo-50 px-1.5 py-0.5 rounded-md">
+                                                                            {a.sdr.name}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                {a.callbackDate && (a.result === "MEETING_BOOKED" || isCallbackResult(a.result)) ? (
+                                                                    <div className="flex flex-col">
+                                                                        <time
+                                                                            dateTime={a.callbackDate}
+                                                                            className="text-[11px] text-indigo-500 font-semibold"
+                                                                        >
+                                                                            {a.result === "MEETING_BOOKED" ? "RDV " : "Rappel "}
+                                                                            {new Date(a.callbackDate).toLocaleDateString("fr-FR", {
+                                                                                day: "2-digit",
+                                                                                month: "short",
+                                                                                year: "numeric",
+                                                                                hour: "2-digit",
+                                                                                minute: "2-digit",
+                                                                            })}
+                                                                        </time>
+                                                                        <time
+                                                                            dateTime={a.createdAt}
+                                                                            className="text-[10px] text-slate-400"
+                                                                        >
+                                                                            créé le {new Date(a.createdAt).toLocaleDateString("fr-FR", {
+                                                                                day: "2-digit",
+                                                                                month: "short",
+                                                                            })}
+                                                                        </time>
+                                                                    </div>
+                                                                ) : (
+                                                                    <time
+                                                                        dateTime={a.createdAt}
+                                                                        className="text-[11px] text-slate-400 font-medium"
+                                                                    >
+                                                                        {new Date(a.createdAt).toLocaleDateString("fr-FR", {
+                                                                            day: "2-digit",
+                                                                            month: "short",
+                                                                            year: "numeric",
+                                                                            hour: "2-digit",
+                                                                            minute: "2-digit",
+                                                                        })}
+                                                                    </time>
+                                                                )}
+                                                            </div>
+                                                            {hasContent && (
+                                                                <ChevronDown
+                                                                    className={cn(
+                                                                        "w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200",
+                                                                        isExpanded && "rotate-180"
+                                                                    )}
+                                                                    aria-hidden="true"
+                                                                />
+                                                            )}
+                                                        </button>
+
+                                                        {/* Expandable note content */}
+                                                        {hasContent && isExpanded && (
+                                                            <div className="px-3.5 pb-3.5 pt-0 border-t border-slate-100 space-y-2">
+                                                                {a.note && (
+                                                                    <p className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed pt-2">
+                                                                        {a.note}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </li>
+                                            );
+                                        })}
+                                    </ol>
+
+                                    {/* Show more / less */}
+                                    {actions.length > 5 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setHistoryExpanded((v) => !v)}
+                                            className="mt-3 w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 py-2.5 rounded-xl bg-indigo-50/40 hover:bg-indigo-50 border border-indigo-100 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 hover:border-indigo-200 active:scale-[0.99]"
+                                        >
+                                            {historyExpanded ? (
+                                                <>
+                                                    <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
+                                                    Voir moins
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+                                                    Voir {actions.length - 5} action{actions.length - 5 > 1 ? "s" : ""} de plus
+                                                </>
+                                            )}
+                                        </button>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                            </div>
+                        )}
+                    </section>
+
+                    {/* ── Record Action Section (primary task — highest-contrast section in the drawer) ── */}
+                    <section
+                        aria-label="Enregistrer une action"
+                        className="overflow-hidden rounded-[18px] border-2 border-[#0c3b38]/15 bg-white shadow-[0_20px_44px_-28px_rgba(12,59,56,0.55)]"
+                        style={{ animation: "uadSectionIn 250ms 150ms cubic-bezier(0.16, 1, 0.3, 1) both" }}
+                    >
+                        <div className="flex items-center gap-2.5 bg-[var(--elan-petrol)] px-3.5 py-3">
+                            <div
+                                className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/15"
+                                aria-hidden="true"
+                            >
+                                <MessageSquare className="w-3.5 h-3.5 text-white" />
+                            </div>
+                            <h2 className="text-sm font-bold text-white" id="record-action-heading">Enregistrer une action</h2>
+                            {newActionResult && (
+                                <span className="ml-auto text-[10px] font-semibold text-white bg-white/15 border border-white/20 px-2 py-0.5 rounded-full">
+                                    {statusLabels[newActionResult] ?? newActionResult}
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="p-4">
+                            {campaignsLoading ? (
+                                <div className="space-y-3 py-2">
+                                    <TextSkeleton lines={1} className="h-9 w-full" />
+                                    <TextSkeleton lines={2} />
+                                </div>
+                            ) : campaigns.length === 0 ? (
+                                <p className="text-sm text-slate-500 py-4 text-center">
+                                    Aucune campagne disponible pour cette mission.
+                                </p>
+                            ) : (
+                                <div className="space-y-4">
+                                    {/* Outcome chips */}
+                                    <fieldset>
+                                        <legend className="text-xs font-bold text-slate-700 mb-2.5 uppercase tracking-wider flex items-center gap-1.5">
+                                            Résultat <span className="text-red-500" aria-hidden="true">*</span>
+                                            <span className="sr-only">(obligatoire)</span>
+                                        </legend>
+                                        <div
+                                            className="flex flex-wrap gap-2"
+                                            role="radiogroup"
+                                            aria-label="Sélectionnez le résultat de l'action"
+                                            aria-required="true"
+                                        >
+                                            {statusOptions.map((opt) => {
+                                                const cfg =
+                                                    RESULT_CHIP_CONFIG[opt.value] ||
+                                                    RESULT_CHIP_CONFIG.NO_RESPONSE;
+                                                const Icon = cfg.icon;
+                                                const isSelected = newActionResult === opt.value;
+                                                const chipButton = (
+                                                    <button
+                                                        key={opt.value}
+                                                        type="button"
+                                                        role="radio"
+                                                        aria-checked={isSelected}
+                                                        onClick={() => {
+                                                            setNewActionResult(opt.value);
+                                                            if (opt.value === "MEETING_BOOKED" && canOpenBookingFlow) {
+                                                                setShowBookingDrawer(true);
+                                                            }
+                                                        }}
+                                                        className={cn(
+                                                            "flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1",
+                                                            isSelected
+                                                                ? cn(
+                                                                    cfg.selectedBg,
+                                                                    cfg.selectedText,
+                                                                    cfg.selectedBorder,
+                                                                    "ring-1 shadow-sm scale-[1.02]",
+                                                                    `focus-visible:ring-${cfg.dot.replace("bg-", "")}`
+                                                                )
+                                                                : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50 hover:shadow-sm active:scale-[0.98]"
+                                                        )}
+                                                    >
+                                                        <Icon
+                                                            className={cn("w-3.5 h-3.5 shrink-0", isSelected ? cfg.selectedText : "text-slate-400")}
+                                                            aria-hidden="true"
+                                                        />
+                                                        {opt.label}
+                                                    </button>
+                                                );
+                                                if (!opt.title) return chipButton;
+                                                return (
+                                                    <Tooltip
+                                                        key={`${opt.value}-tooltip`}
+                                                        position="top"
+                                                        maxWidth="max-w-sm"
+                                                        content={
+                                                            <div className="space-y-1">
+                                                                {opt.title.split("\n").map((line, idx) => (
+                                                                    <p key={`${opt.value}-${idx}`} className="text-xs leading-relaxed">
+                                                                        {line}
+                                                                    </p>
+                                                                ))}
+                                                            </div>
+                                                        }
+                                                    >
+                                                        {chipButton}
+                                                    </Tooltip>
+                                                );
+                                            })}
+                                        </div>
+                                    </fieldset>
+
+                                    {/* ── Inline email panel: mailbox + template + edit-before-send ── */}
+                                    {newActionResult === "ENVOIE_MAIL" && (
+                                        <div className="rounded-xl border border-[#CBD8D4] bg-[#F7F9F8] p-3.5 space-y-3">
+                                            <div className="flex items-center gap-2 mb-0.5">
+                                                <div className="w-6 h-6 rounded-lg bg-[#1F4D47] flex items-center justify-center">
+                                                    <Mail className="w-3.5 h-3.5 text-white" aria-hidden="true" />
+                                                </div>
+                                                <span className="text-sm font-semibold text-[#1F4D47]">Envoyer un email</span>
+                                                {missionName && <span className="text-xs text-slate-400 truncate">· {missionName}</span>}
+                                            </div>
+
+                                            {/* Recipient display */}
+                                            {contact?.email ? (
+                                                <div className="flex items-center gap-2 text-xs text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-2">
+                                                    <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                                    <span className="font-medium text-slate-700">À :</span>
+                                                    <span className="truncate">{contact.email}</span>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                                                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                                                    Ce contact n&apos;a pas d&apos;adresse email enregistrée
+                                                </div>
+                                            )}
+
+                                            {/* Mailbox selector — defaults to the mission's attached mailbox */}
+                                            <div>
+                                                <label className="block text-xs font-semibold text-slate-600 mb-1">Boîte d&apos;envoi <span className="text-red-500">*</span></label>
+                                                {emailMailboxesLoading ? (
+                                                    <div className="flex items-center gap-2 text-xs text-slate-500 py-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Chargement...</div>
+                                                ) : emailMailboxes.length === 0 ? (
+                                                    <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
+                                                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                                                        Aucune boîte mail configurée
+                                                    </div>
+                                                ) : (
+                                                    <select
+                                                        value={emailSelectedMailboxId}
+                                                        onChange={e => setEmailSelectedMailboxId(e.target.value)}
+                                                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1F4D47]/25 focus:border-[#1F4D47]"
+                                                    >
+                                                        {emailMailboxes.map(mb => (
+                                                            <option key={mb.id} value={mb.id}>
+                                                                {mb.displayName ? `${mb.displayName} <${mb.email}>` : mb.email}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                )}
+                                            </div>
+
+                                            {/* Template selector */}
+                                            <div>
+                                                <label className="block text-xs font-semibold text-slate-600 mb-1">Template <span className="text-red-500">*</span></label>
+                                                {emailTemplatesLoading ? (
+                                                    <div className="flex items-center gap-2 text-xs text-slate-500 py-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Chargement des templates...</div>
+                                                ) : emailTemplates.length === 0 ? (
+                                                    <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
+                                                        <FileText className="w-3.5 h-3.5 shrink-0" />
+                                                        Aucun template assigné à cette mission
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-0.5 email-scrollbar">
+                                                        {emailTemplates.map(mt => {
+                                                            const isSelected = (emailSelectedTemplateId || emailTemplates[0]?.templateId) === mt.templateId;
+                                                            const catColors: Record<string, string> = {
+                                                                OUTREACH: "bg-[#EDF4F2] text-[#1F4D47]",
+                                                                FOLLOW_UP: "bg-amber-100 text-amber-700",
+                                                                NURTURE: "bg-violet-100 text-violet-700",
+                                                                CLOSING: "bg-emerald-100 text-emerald-700",
+                                                                OTHER: "bg-slate-100 text-slate-600",
+                                                            };
+                                                            return (
+                                                                <div
+                                                                    key={mt.id}
+                                                                    role="button"
+                                                                    tabIndex={0}
+                                                                    onClick={() => setEmailSelectedTemplateId(mt.templateId)}
+                                                                    onKeyDown={e => e.key === "Enter" && setEmailSelectedTemplateId(mt.templateId)}
+                                                                    className={cn(
+                                                                        "flex items-start gap-2.5 px-3 py-2 rounded-lg border cursor-pointer transition-all",
+                                                                        isSelected
+                                                                            ? "border-[#1F4D47] bg-[#EDF4F2] ring-1 ring-[#1F4D47]/30"
+                                                                            : "border-slate-200 bg-white hover:border-[#9DBBB4] hover:bg-[#F1F4F3]"
+                                                                    )}
+                                                                >
+                                                                    <div className={cn("mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-all", isSelected ? "border-[#1F4D47] bg-[#1F4D47]" : "border-slate-300")}>
+                                                                        {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                                                                    </div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                                            <span className="text-sm font-medium text-slate-800 truncate">{mt.template.name}</span>
+                                                                            <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0", catColors[mt.template.category] ?? catColors.OTHER)}>
+                                                                                {mt.template.category}
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Rendered preview + edit-before-send */}
+                                            {chosenEmailTemplate && (
+                                                <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
+                                                    <div className="flex items-center justify-between gap-2 bg-[#F1F4F3] border-b border-slate-200 px-3 py-1.5">
+                                                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                                                            <Eye className="w-3.5 h-3.5" />
+                                                            {emailIsEditing ? "Édition" : "Aperçu"}
+                                                            <span className="text-slate-300">·</span>
+                                                            <span className="text-[10px]">variables remplies avec ce contact</span>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setEmailIsEditing(v => !v)}
+                                                            className={cn(
+                                                                "flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md transition-colors",
+                                                                emailIsEditing ? "text-white bg-[#1F4D47] hover:bg-[#173A35]" : "text-[#1F4D47] hover:bg-[#EDF4F2]"
+                                                            )}
+                                                        >
+                                                            <Edit3 className="w-3 h-3" />
+                                                            {emailIsEditing ? "Terminé" : "Modifier"}
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Subject */}
+                                                    <div className="px-3 py-2 border-b border-slate-100">
+                                                        {emailIsEditing ? (
+                                                            <input
+                                                                type="text"
+                                                                value={emailEditSubject}
+                                                                onChange={e => setEmailEditSubject(e.target.value)}
+                                                                placeholder="Objet"
+                                                                className="w-full text-sm font-medium text-slate-800 bg-transparent focus:outline-none"
+                                                            />
+                                                        ) : (
+                                                            <p className="text-sm font-medium text-slate-800">
+                                                                <span className="text-slate-400 font-normal">Objet : </span>
+                                                                {emailEditSubject || <span className="text-slate-400 italic">(vide)</span>}
+                                                            </p>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Body */}
+                                                    {emailIsEditing ? (
+                                                        <div
+                                                            contentEditable
+                                                            suppressContentEditableWarning
+                                                            onInput={e => setEmailEditBody(e.currentTarget.innerHTML)}
+                                                            className="p-3 max-h-56 overflow-y-auto text-sm text-slate-700 focus:outline-none email-scrollbar"
+                                                            style={{ fontFamily: "Arial, sans-serif", fontSize: "13px", lineHeight: "1.55" }}
+                                                            dangerouslySetInnerHTML={{ __html: emailEditBody }}
+                                                        />
+                                                    ) : (
+                                                        <div
+                                                            className="p-3 max-h-56 overflow-y-auto text-sm text-slate-700 email-scrollbar"
+                                                            style={{ fontFamily: "Arial, sans-serif", fontSize: "13px", lineHeight: "1.55" }}
+                                                            dangerouslySetInnerHTML={{ __html: stripScripts(highlightVariables(chosenEmailTemplate.bodyHtml, emailVariables)) }}
+                                                        />
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Send buttons */}
+                                            <div className="flex gap-2 pt-1 border-t border-[#CBD8D4]">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleSendEmailAndRecord(false)}
+                                                    disabled={sendEmailMutation.isPending || !contact?.email || !emailSelectedMailboxId || !getChosenTemplateId()}
+                                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-[#1F4D47] hover:bg-[#173A35] disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-colors"
+                                                >
+                                                    {sendEmailMutation.isPending ? (
+                                                        <><Loader2 className="w-4 h-4 animate-spin" /> Envoi...</>
+                                                    ) : (
+                                                        <><Send className="w-4 h-4" /> Envoyer l&apos;email</>
+                                                    )}
+                                                </button>
+                                                {onValidateAndNext && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleSendEmailAndRecord(true)}
+                                                        disabled={sendEmailMutation.isPending || !contact?.email || !emailSelectedMailboxId || !getChosenTemplateId()}
+                                                        className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-[#1F4D47] bg-[#EDF4F2] hover:bg-[#DDE9E5] disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-colors"
+                                                    >
+                                                        {sendEmailMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
+                                                        Envoyer &amp; Suivant
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Contextual: callback date */}
+                                    {isCallbackResult(newActionResult) && (
+                                        <div
+                                            role="group"
+                                            aria-label="Date de rappel"
+                                            className="rounded-xl border border-amber-200 bg-amber-50/50 p-3.5"
+                                        >
+                                            <DateTimePicker
+                                                label="Date de rappel"
+                                                value={newCallbackDateValue}
+                                                onChange={setNewCallbackDateValue}
+                                                placeholder="Choisir date et heure du rappel…"
+                                                triggerClassName="border-amber-200 focus:ring-amber-400/40 focus:border-amber-400"
+                                            />
+                                            <p className="text-xs text-slate-500 mt-1.5 flex items-center gap-1">
+                                                <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                                Optionnel. Vous pouvez aussi indiquer la date dans la note.
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {/* Contextual: meeting booking — always shown for MEETING_BOOKED */}
+                                    {newActionResult === "MEETING_BOOKED" && (
+                                        <div className="rounded-xl border border-[#B9D0CB] bg-[#F3F7F6] p-3.5 space-y-3">
+                                            {canOpenBookingFlow ? (
+                                                <>
+                                                    <div className="flex items-start gap-2.5">
+                                                        <Calendar className="mt-0.5 h-4 w-4 shrink-0 text-[#1F4D47]" aria-hidden="true" />
+                                                        <div>
+                                                            <p className="text-sm font-semibold text-[#173C37]">Rendez-vous en 2 étapes</p>
+                                                            <p className="mt-0.5 text-xs leading-relaxed text-slate-600">
+                                                                1. Données CRM&nbsp;&nbsp;·&nbsp;&nbsp;2. Créneau dans le calendrier
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <Button
+                                                        type="button"
+                                                        variant="secondary"
+                                                        onClick={() => setShowBookingDrawer(true)}
+                                                        className="w-full gap-2 border-[#8FB2AA] text-[#1F4D47] hover:bg-white"
+                                                    >
+                                                        <Calendar className="w-4 h-4" aria-hidden="true" />
+                                                        Reprendre la planification
+                                                    </Button>
+                                                </>
+                                            ) : (
+                                                <p className="text-xs leading-relaxed text-amber-800">
+                                                    Aucun calendrier de réservation n’est configuré pour ce client.
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {newActionResult === "MAUVAIS_INTERLOCUTEUR" && (
+                                        <div className="rounded-xl border border-rose-200 bg-rose-50/40 p-3.5 space-y-3">
+                                            <div className="flex items-start gap-2">
+                                                <Info className="w-4 h-4 text-rose-600 mt-0.5" aria-hidden="true" />
+                                                <div>
+                                                    <p className="text-sm font-semibold text-rose-800">Ajouter le bon contact</p>
+                                                    <p className="text-xs text-rose-700/90">
+                                                        Renseignez les informations du bon interlocuteur puis enregistrez-le.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                                <input
+                                                    value={newInterlocutorContact.firstName}
+                                                    onChange={(e) => {
+                                                        setInterlocutorContactSaved(false);
+                                                        setNewInterlocutorContact((prev) => ({ ...prev, firstName: e.target.value }));
+                                                    }}
+                                                    placeholder="Prénom"
+                                                    className="w-full px-3 py-2 text-sm border border-rose-200 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400"
+                                                />
+                                                <input
+                                                    value={newInterlocutorContact.lastName}
+                                                    onChange={(e) => {
+                                                        setInterlocutorContactSaved(false);
+                                                        setNewInterlocutorContact((prev) => ({ ...prev, lastName: e.target.value }));
+                                                    }}
+                                                    placeholder="Nom"
+                                                    className="w-full px-3 py-2 text-sm border border-rose-200 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400"
+                                                />
+                                                <input
+                                                    value={newInterlocutorContact.phone}
+                                                    onChange={(e) => {
+                                                        setInterlocutorContactSaved(false);
+                                                        setNewInterlocutorContact((prev) => ({ ...prev, phone: e.target.value }));
+                                                    }}
+                                                    placeholder="Téléphone"
+                                                    className="w-full px-3 py-2 text-sm border border-rose-200 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400"
+                                                />
+                                                <input
+                                                    type="email"
+                                                    value={newInterlocutorContact.email}
+                                                    onChange={(e) => {
+                                                        setInterlocutorContactSaved(false);
+                                                        setNewInterlocutorContact((prev) => ({ ...prev, email: e.target.value }));
+                                                    }}
+                                                    placeholder="Email"
+                                                    className="w-full px-3 py-2 text-sm border border-rose-200 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400"
+                                                />
+                                            </div>
+                                            <div className="flex items-center justify-between gap-2">
+                                                <p className="text-[11px] text-rose-700/80">
+                                                    Renseignez au moins un nom (prénom/nom) et un canal (téléphone/email).
+                                                </p>
+                                                <Button
+                                                    type="button"
+                                                    variant="secondary"
+                                                    onClick={() => createInterlocutorContactMutation.mutate()}
+                                                    disabled={!canCreateInterlocutorContact}
+                                                    isLoading={createInterlocutorContactMutation.isPending}
+                                                    className="gap-2 shrink-0 border-rose-300 text-rose-700 hover:bg-rose-100"
+                                                >
+                                                    <Save className="w-4 h-4" aria-hidden="true" />
+                                                    Sauvegarder le contact
+                                                </Button>
+                                            </div>
+                                            {requiresSavedInterlocutorBeforeSubmit && (
+                                                <p className="text-[11px] text-rose-700">
+                                                    Sauvegardez d&apos;abord le nouveau contact pour pouvoir enregistrer l&apos;action.
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Note */}
+                                    {newActionResult !== "ENVOIE_MAIL" && (
+                                    <div>
+                                        <label
+                                            htmlFor="action-note"
+                                            className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider"
+                                        >
+                                            {isRefusalResult ? "Raison du refus" : isOutOfTargetResult ? "Raison du hors cible" : "Note"}
+                                            {textFieldRequiredForResult && (
+                                                <span className="text-red-500 ml-1" aria-hidden="true">*</span>
+                                            )}
+                                            {textFieldRequiredForResult && (
+                                                <span className="sr-only"> (obligatoire)</span>
+                                            )}
+                                        </label>
+                                        <div className="relative">
+                                            <textarea
+                                                id="action-note"
+                                                ref={noteRef}
+                                                value={newActionNote}
+                                                onChange={(e) => setNewActionNote(e.target.value)}
+                                                placeholder={notePlaceholder}
+                                                rows={3}
+                                                maxLength={500}
+                                                aria-required={textFieldRequiredForResult}
+                                                aria-describedby="note-char-count"
+                                                className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400 resize-none transition-all"
+                                            />
+                                        </div>
+                                        {linkedAlloCall && (
+                                            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-50 border border-emerald-200 mt-2">
+                                                <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                                                    <PhoneCall className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className="text-xs font-semibold text-emerald-800">Appel Allo validé</span>
+                                                        {linkedAlloCall.duration > 0 && (
+                                                            <span className="text-[11px] text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded-md font-medium">
+                                                                {Math.floor(linkedAlloCall.duration / 60)}m{linkedAlloCall.duration % 60}s
+                                                            </span>
+                                                        )}
+                                                        {linkedAlloCall.outcome && (
+                                                            <span className="text-[11px] text-slate-500">{linkedAlloCall.outcome}</span>
+                                                        )}
+                                                    </div>
+                                                    {linkedAlloCall.summary && (
+                                                        <p className="text-xs text-emerald-700 mt-1 line-clamp-2">{linkedAlloCall.summary}</p>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setLinkedAlloCall(null)}
+                                                    className="w-6 h-6 rounded flex items-center justify-center text-emerald-400 hover:text-emerald-700 transition-colors flex-shrink-0"
+                                                    title="Retirer le lien"
+                                                    aria-label="Retirer l'appel Allo sélectionné"
+                                                >
+                                                    <XCircle className="w-4 h-4" aria-hidden="true" />
+                                                </button>
+                                            </div>
+                                        )}
+                                        <div className="flex items-center justify-between gap-2 mt-1.5 flex-wrap">
+                                            <button
+                                                type="button"
+                                                onClick={handleImproveNote}
+                                                disabled={newActionNote.trim().length < MIN_NOTE_LENGTH_FOR_AI_ENHANCE || improveNoteMutation.isPending}
+                                                aria-label="Améliorer la note avec l'IA"
+                                                className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-400 rounded-lg px-2 py-1 hover:bg-indigo-50 border border-transparent hover:border-indigo-100"
+                                            >
+                                                {improveNoteMutation.isPending ? (
+                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                                                ) : (
+                                                    <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                                                )}
+                                                {improveNoteMutation.isPending ? "Amélioration…" : "Améliorer avec l'IA"}
+                                            </button>
+                                            {isCallCampaign && (
+                                                <button
+                                                    type="button"
+                                                    onClick={openAlloDialog}
+                                                    className={cn(
+                                                        "flex items-center gap-1.5 text-xs font-semibold rounded-lg px-2.5 py-1 border transition-all",
+                                                        linkedAlloCall
+                                                            ? "text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100"
+                                                            : "text-indigo-600 bg-indigo-50 border-indigo-100 hover:bg-indigo-100"
+                                                    )}
+                                                >
+                                                    <PhoneCall className="w-3.5 h-3.5" aria-hidden="true" />
+                                                    {linkedAlloCall ? "Appel validé ✓" : "Valider l'appel (Allo)"}
+                                                </button>
+                                            )}
+                                            <p
+                                                id="note-char-count"
+                                                className="text-xs text-slate-400 ml-auto"
+                                                aria-live="polite"
+                                                aria-atomic="true"
+                                            >
+                                                {newActionNote.length}/500
+                                            </p>
+                                        </div>
+                                    </div>
+                                    )}
+
+                                    {newActionResult !== "ENVOIE_MAIL" && (
+                                    <div className="sticky -bottom-4 z-10 -mx-4 flex flex-col gap-2 border-t border-[#dfe7e3] bg-white/95 px-4 pb-1 pt-3 shadow-[0_-12px_28px_-24px_rgba(12,59,56,0.45)] backdrop-blur sm:flex-row">
+                                        <Button
+                                            type="button"
+                                            variant="primary"
+                                            onClick={() => handleAddAction(false)}
+                                            disabled={!canSubmit}
+                                            isLoading={addActionMutation.isPending}
+                                            className={cn(
+                                                "gap-2 shadow-sm transition-all duration-200",
+                                                canSubmit && "hover:shadow-md hover:scale-[1.01]",
+                                                onValidateAndNext ? "flex-1" : "w-full"
+                                            )}
+                                        >
+                                            <Check className="w-4 h-4" aria-hidden="true" />
+                                            Enregistrer
+                                        </Button>
+                                        {onValidateAndNext && (
+                                            <Button
+                                                type="button"
+                                                variant="secondary"
+                                                onClick={() => handleAddAction(true)}
+                                                disabled={!canSubmit}
+                                                isLoading={addActionMutation.isPending}
+                                                className="gap-2 flex-1 shadow-sm"
+                                            >
+                                                <ChevronRight className="w-4 h-4" aria-hidden="true" />
+                                                Valider & suivant
+                                            </Button>
+                                        )}
+                                    </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </section>
+
 
 
                 </div>

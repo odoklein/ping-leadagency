@@ -11,6 +11,8 @@ import {
     History, Loader2, XCircle, ArrowUpRight, ArrowDownRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MultiSelect, type SelectOption } from "@/components/ui";
+import Link from "next/link";
 
 // ============================================
 // TYPES
@@ -100,6 +102,9 @@ interface WeeklyAnalysis {
     weekStart: string;
     weekEnd: string;
     label: string | null;
+    missionIds: string[];
+    clientIds: string[];
+    sdrIds: string[];
     status: "running" | "completed" | "failed";
     executiveSummary: string;
     confidenceScore: number;
@@ -163,6 +168,50 @@ function pctBar(value: number, max = 1) {
     return Math.min(100, Math.round((value / max) * 100));
 }
 
+// The LLM output is free-text, but the analysis's own scope (mission/client/SDR
+// ids) is real data we already have — render it as actual links into those
+// records instead of a dead-end text summary.
+function ScopeChips({
+    analysis,
+    missionOptions,
+    clientOptions,
+    sdrOptions,
+}: {
+    analysis: { missionIds?: string[]; clientIds?: string[]; sdrIds?: string[] };
+    missionOptions: SelectOption[];
+    clientOptions: SelectOption[];
+    sdrOptions: SelectOption[];
+}) {
+    const nameOf = (opts: SelectOption[], id: string) => opts.find((o) => o.value === id)?.label || id;
+    const hasScope =
+        (analysis.missionIds?.length || 0) + (analysis.clientIds?.length || 0) + (analysis.sdrIds?.length || 0) > 0;
+
+    if (!hasScope) {
+        return <span className="text-emerald-100/70 text-xs">Portée : toute l&apos;équipe</span>;
+    }
+
+    const chipCls = "text-xs bg-white/15 hover:bg-white/25 rounded-full px-2 py-0.5 transition-colors";
+    return (
+        <div className="flex flex-wrap items-center gap-1.5">
+            {analysis.missionIds?.map((id) => (
+                <Link key={`m-${id}`} href={`/manager/missions/${id}`} className={chipCls}>
+                    {nameOf(missionOptions, id)}
+                </Link>
+            ))}
+            {analysis.clientIds?.map((id) => (
+                <Link key={`c-${id}`} href={`/manager/clients/${id}`} className={chipCls}>
+                    {nameOf(clientOptions, id)}
+                </Link>
+            ))}
+            {analysis.sdrIds?.map((id) => (
+                <Link key={`s-${id}`} href={`/manager/utilisateurs/${id}`} className={chipCls}>
+                    {nameOf(sdrOptions, id)}
+                </Link>
+            ))}
+        </div>
+    );
+}
+
 // ============================================
 // SUB-COMPONENTS
 // ============================================
@@ -185,13 +234,17 @@ function ConfidenceBadge({ score, size = "sm" }: { score: number; size?: "sm" | 
     );
 }
 
-function PriorityBadge({ priority }: { priority: "P1" | "P2" | "P3" }) {
-    const config = {
+// Badge lookups fall back to a default entry: the API now validates the LLM
+// response server-side, but analyses persisted before that validation existed
+// (or the "prior analysis" chain) can still carry an unexpected enum value —
+// this must degrade gracefully rather than throw at render time.
+function PriorityBadge({ priority }: { priority: string }) {
+    const config: Record<string, { label: string; cls: string }> = {
         P1: { label: "P1 Critique", cls: "bg-rose-100 text-rose-700 border-rose-200" },
         P2: { label: "P2 Important", cls: "bg-amber-100 text-amber-700 border-amber-200" },
         P3: { label: "P3 À planifier", cls: "bg-blue-100 text-blue-700 border-blue-200" },
     };
-    const { label, cls } = config[priority];
+    const { label, cls } = config[priority] ?? { label: priority || "Priorité", cls: "bg-slate-100 text-slate-600 border-slate-200" };
     return (
         <span className={cn("inline-flex items-center rounded border text-xs font-semibold px-2 py-0.5", cls)}>
             {label}
@@ -199,13 +252,13 @@ function PriorityBadge({ priority }: { priority: "P1" | "P2" | "P3" }) {
     );
 }
 
-function ImpactBadge({ impact }: { impact: "HIGH" | "MEDIUM" | "LOW" }) {
-    const config = {
+function ImpactBadge({ impact }: { impact: string }) {
+    const config: Record<string, { label: string; cls: string }> = {
         HIGH: { label: "Impact élevé", cls: "bg-rose-50 text-rose-700 border-rose-200" },
         MEDIUM: { label: "Impact moyen", cls: "bg-amber-50 text-amber-700 border-amber-200" },
         LOW: { label: "Impact faible", cls: "bg-slate-50 text-slate-600 border-slate-200" },
     };
-    const { label, cls } = config[impact];
+    const { label, cls } = config[impact] ?? { label: impact || "Impact", cls: "bg-slate-50 text-slate-600 border-slate-200" };
     return (
         <span className={cn("inline-flex items-center rounded border text-xs font-medium px-2 py-0.5", cls)}>
             {label}
@@ -213,21 +266,21 @@ function ImpactBadge({ impact }: { impact: "HIGH" | "MEDIUM" | "LOW" }) {
     );
 }
 
-function SeverityBadge({ severity }: { severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" }) {
-    const config = {
+function SeverityBadge({ severity }: { severity: string }) {
+    const config: Record<string, string> = {
         CRITICAL: "bg-rose-100 text-rose-700 border-rose-300",
         HIGH: "bg-orange-100 text-orange-700 border-orange-200",
         MEDIUM: "bg-amber-100 text-amber-600 border-amber-200",
         LOW: "bg-slate-100 text-slate-600 border-slate-200",
     };
     return (
-        <span className={cn("inline-flex items-center rounded border text-xs font-medium px-2 py-0.5", config[severity])}>
-            {severity}
+        <span className={cn("inline-flex items-center rounded border text-xs font-medium px-2 py-0.5", config[severity] ?? "bg-slate-100 text-slate-600 border-slate-200")}>
+            {severity || "N/A"}
         </span>
     );
 }
 
-function TrendIcon({ trend }: { trend: "UP" | "DOWN" | "STABLE" | "VOLATILE" }) {
+function TrendIcon({ trend }: { trend: string }) {
     if (trend === "UP") return <ArrowUpRight className="w-4 h-4 text-emerald-500" />;
     if (trend === "DOWN") return <ArrowDownRight className="w-4 h-4 text-rose-500" />;
     if (trend === "VOLATILE") return <Activity className="w-4 h-4 text-amber-500" />;
@@ -550,18 +603,34 @@ function ObjectionHandlingSection({ objections }: { objections: ObjectionHandlin
     );
 }
 
-function SdrCoachingSection({ actions }: { actions: SdrCoachingAction[] }) {
+function SdrCoachingSection({ actions, sdrOptions }: { actions: SdrCoachingAction[]; sdrOptions: SelectOption[] }) {
     if (!actions?.length) return <p className="text-sm text-slate-400">Aucune action de coaching identifiée.</p>;
     return (
         <div className="space-y-3">
-            {actions.map((action, i) => (
+            {actions.map((action, i) => {
+                // The LLM only returns a name string, not a real user id — match it
+                // against the known SDR list so we can link through when possible
+                // instead of leaving every coaching note as a dead-end text blob.
+                const matchedSdr = action.sdrName
+                    ? sdrOptions.find((o) => o.label.toLowerCase() === action.sdrName!.toLowerCase())
+                    : undefined;
+                return (
                 <div key={i} className="border border-slate-200 rounded-lg p-4 space-y-2">
                     <div className="flex items-start justify-between gap-3">
                         <div>
                             {action.sdrName && (
-                                <p className="text-xs font-semibold text-indigo-500 mb-0.5 flex items-center gap-1">
-                                    <Users className="w-3 h-3" /> {action.sdrName}
-                                </p>
+                                matchedSdr ? (
+                                    <Link
+                                        href={`/manager/utilisateurs/${matchedSdr.value}`}
+                                        className="text-xs font-semibold text-indigo-500 mb-0.5 flex items-center gap-1 w-fit hover:underline"
+                                    >
+                                        <Users className="w-3 h-3" /> {action.sdrName}
+                                    </Link>
+                                ) : (
+                                    <p className="text-xs font-semibold text-indigo-500 mb-0.5 flex items-center gap-1">
+                                        <Users className="w-3 h-3" /> {action.sdrName}
+                                    </p>
+                                )
                             )}
                             <p className="text-sm font-medium text-slate-800">{action.issue}</p>
                         </div>
@@ -576,7 +645,8 @@ function SdrCoachingSection({ actions }: { actions: SdrCoachingAction[] }) {
                         <span className="font-medium">Indicateur à suivre :</span> {action.metric}
                     </p>
                 </div>
-            ))}
+                );
+            })}
         </div>
     );
 }
@@ -852,8 +922,52 @@ export default function AnalyseIAPage() {
     const [selectedAnalysis, setSelectedAnalysis] = useState<WeeklyAnalysis | null>(null);
     const [showHistory, setShowHistory] = useState(false);
     const [runLabel, setRunLabel] = useState("");
+    const [scopeMissionIds, setScopeMissionIds] = useState<string[]>([]);
+    const [scopeClientIds, setScopeClientIds] = useState<string[]>([]);
+    const [scopeSdrIds, setScopeSdrIds] = useState<string[]>([]);
 
     const { weekStart, weekEnd } = getWeekBounds(weekOffset);
+
+    // Scope pickers — missions/clients/SDRs to narrow an analysis to. Left
+    // empty, an analysis covers the whole company (unscoped).
+    const { data: missionOptions = [] } = useQuery({
+        queryKey: ["analyse-ia-mission-options"],
+        queryFn: async () => {
+            const res = await fetch("/api/missions?limit=200&statuses=DRAFT,ACTIVE,PAUSED");
+            const json = await res.json();
+            if (!json.success) return [];
+            return (json.data as Array<{ id: string; name: string; client?: { name?: string } }>).map(
+                (m): SelectOption => ({ value: m.id, label: m.client?.name ? `${m.name} — ${m.client.name}` : m.name })
+            );
+        },
+        staleTime: 5 * 60_000,
+    });
+
+    const { data: clientOptions = [] } = useQuery({
+        queryKey: ["analyse-ia-client-options"],
+        queryFn: async () => {
+            const res = await fetch("/api/clients?limit=200");
+            const json = await res.json();
+            if (!json.success) return [];
+            return (json.data as Array<{ id: string; name: string }>).map(
+                (c): SelectOption => ({ value: c.id, label: c.name })
+            );
+        },
+        staleTime: 5 * 60_000,
+    });
+
+    const { data: sdrOptions = [] } = useQuery({
+        queryKey: ["analyse-ia-sdr-options"],
+        queryFn: async () => {
+            const res = await fetch("/api/users?role=SDR&status=active&limit=200&excludeSelf=false");
+            const json = await res.json();
+            if (!json.success) return [];
+            return (json.data.users as Array<{ id: string; name: string }>).map(
+                (u): SelectOption => ({ value: u.id, label: u.name })
+            );
+        },
+        staleTime: 5 * 60_000,
+    });
 
     // Fetch history
     const { data: historyData, isLoading: historyLoading } = useQuery({
@@ -877,9 +991,9 @@ export default function AnalyseIAPage() {
                     weekStart,
                     weekEnd,
                     label: runLabel || undefined,
-                    missionIds: [],
-                    clientIds: [],
-                    sdrIds: [],
+                    missionIds: scopeMissionIds,
+                    clientIds: scopeClientIds,
+                    sdrIds: scopeSdrIds,
                 }),
             });
             const json = await res.json();
@@ -1039,6 +1153,39 @@ export default function AnalyseIAPage() {
                             </span>
                         )}
                     </div>
+
+                    {/* Scope — narrow the analysis to specific missions/clients/SDRs.
+                        Left empty, the analysis covers the whole company. */}
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 shrink-0">
+                            <Filter className="w-3.5 h-3.5" />
+                            Portée :
+                        </span>
+                        <MultiSelect
+                            options={missionOptions}
+                            value={scopeMissionIds}
+                            onChange={setScopeMissionIds}
+                            placeholder="Toutes les missions"
+                            className="w-full sm:w-56"
+                        />
+                        <MultiSelect
+                            options={clientOptions}
+                            value={scopeClientIds}
+                            onChange={setScopeClientIds}
+                            placeholder="Tous les clients"
+                            className="w-full sm:w-52"
+                        />
+                        <MultiSelect
+                            options={sdrOptions}
+                            value={scopeSdrIds}
+                            onChange={setScopeSdrIds}
+                            placeholder="Tous les SDR"
+                            className="w-full sm:w-52"
+                        />
+                        {(scopeMissionIds.length + scopeClientIds.length + scopeSdrIds.length === 0) && (
+                            <span className="text-xs text-slate-400 italic">Analyse sur l&apos;ensemble de l&apos;équipe</span>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -1077,9 +1224,9 @@ export default function AnalyseIAPage() {
                     <div className="flex-1 min-w-0">
                         {/* Loading state */}
                         {isRunning && (
-                            <div className="bg-white border border-indigo-200 rounded-xl p-8 text-center mb-6">
-                                <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <Brain className="w-8 h-8 text-indigo-600 animate-pulse" />
+                            <div className="bg-white border border-[#CBD8D4] rounded-xl p-8 text-center mb-6">
+                                <div className="w-16 h-16 bg-[#EEF3F1] rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <Brain className="w-8 h-8 text-[#1F4D47] animate-pulse" />
                                 </div>
                                 <h3 className="text-lg font-semibold text-slate-800 mb-2">Analyse en cours…</h3>
                                 <p className="text-sm text-slate-500 max-w-md mx-auto">
@@ -1093,7 +1240,7 @@ export default function AnalyseIAPage() {
                                         "Génération des recommandations…",
                                     ].map((step, i) => (
                                         <div key={i} className="flex items-center gap-2 text-sm text-slate-500">
-                                            <Loader2 className="w-3 h-3 animate-spin text-indigo-400 shrink-0" />
+                                            <Loader2 className="w-3 h-3 animate-spin text-[#1F4D47]/60 shrink-0" />
                                             {step}
                                         </div>
                                     ))}
@@ -1104,8 +1251,8 @@ export default function AnalyseIAPage() {
                         {/* No analysis selected */}
                         {!displayedAnalysis && !isRunning && (
                             <div className="bg-white border border-slate-200 rounded-xl p-12 text-center">
-                                <div className="w-20 h-20 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-5">
-                                    <Brain className="w-10 h-10 text-indigo-400" />
+                                <div className="w-20 h-20 bg-[#EEF3F1] rounded-2xl flex items-center justify-center mx-auto mb-5">
+                                    <Brain className="w-10 h-10 text-[#1F4D47]" />
                                 </div>
                                 <h3 className="text-lg font-semibold text-slate-800 mb-2">
                                     Votre copilote stratégique
@@ -1122,7 +1269,7 @@ export default function AnalyseIAPage() {
                                         { icon: Shield, label: "Objections", desc: "Réponses optimisées" },
                                     ].map(({ icon: Icon, label, desc }) => (
                                         <div key={label} className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-                                            <Icon className="w-5 h-5 text-indigo-500 mb-1.5" />
+                                            <Icon className="w-5 h-5 text-[#1F4D47] mb-1.5" />
                                             <p className="text-sm font-semibold text-slate-700">{label}</p>
                                             <p className="text-xs text-slate-400">{desc}</p>
                                         </div>
@@ -1130,7 +1277,7 @@ export default function AnalyseIAPage() {
                                 </div>
                                 <button
                                     onClick={() => runMutation.mutate()}
-                                    className="mt-8 flex items-center gap-2 px-6 py-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition-all shadow mx-auto"
+                                    className="mt-8 flex items-center gap-2 px-6 py-3 rounded-lg bg-[#1F4D47] hover:bg-[#143C37] text-white font-semibold transition-all shadow mx-auto"
                                 >
                                     <Sparkles className="w-4 h-4" />
                                     Lancer ma première analyse
@@ -1142,27 +1289,36 @@ export default function AnalyseIAPage() {
                         {displayedAnalysis && displayedAnalysis.status === "completed" && !isRunning && (
                             <div className="space-y-5">
                                 {/* Analysis header */}
-                                <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-xl p-5 text-white">
+                                <div className="bg-gradient-to-r from-[#1F4D47] to-[#143C37] rounded-xl p-5 text-white">
                                     <div className="flex items-start justify-between gap-4 flex-wrap">
                                         <div>
-                                            <p className="text-indigo-200 text-xs font-semibold uppercase tracking-wider mb-1">Analyse hebdomadaire</p>
+                                            <p className="text-emerald-100/80 text-xs font-semibold uppercase tracking-wider mb-1">Analyse hebdomadaire</p>
                                             <h2 className="text-lg font-bold">
                                                 {displayedAnalysis.label || formatWeekLabel(displayedAnalysis.weekStart, displayedAnalysis.weekEnd)}
                                             </h2>
-                                            <p className="text-indigo-200 text-sm mt-0.5">
+                                            <p className="text-emerald-100/80 text-sm mt-0.5">
                                                 {(displayedAnalysis.dataSnapshot as any)?.actionCount || 0} actions analysées ·{" "}
                                                 {displayedAnalysis.durationMs ? `${Math.round(displayedAnalysis.durationMs / 1000)}s` : ""} ·{" "}
                                                 {displayedAnalysis.tokensUsed ? `${displayedAnalysis.tokensUsed.toLocaleString()} tokens` : ""}
                                             </p>
+                                            <div className="mt-1.5 flex items-center gap-1.5">
+                                                <Filter className="w-3 h-3 text-emerald-100/70 shrink-0" />
+                                                <ScopeChips
+                                                    analysis={displayedAnalysis}
+                                                    missionOptions={missionOptions}
+                                                    clientOptions={clientOptions}
+                                                    sdrOptions={sdrOptions}
+                                                />
+                                            </div>
                                         </div>
                                         <div className="flex flex-col items-end gap-2">
                                             <div className="flex items-center gap-2">
-                                                <span className="text-indigo-200 text-xs">Confiance</span>
+                                                <span className="text-emerald-100/80 text-xs">Confiance</span>
                                                 <span className="text-lg font-bold">
                                                     {Math.round(displayedAnalysis.confidenceScore * 100)}%
                                                 </span>
                                             </div>
-                                            <div className="w-32 h-1.5 bg-indigo-400/40 rounded-full overflow-hidden">
+                                            <div className="w-32 h-1.5 bg-white/20 rounded-full overflow-hidden">
                                                 <div
                                                     className="h-full bg-white rounded-full"
                                                     style={{ width: `${displayedAnalysis.confidenceScore * 100}%` }}
@@ -1182,7 +1338,7 @@ export default function AnalyseIAPage() {
                                                 className={cn(
                                                     "flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors shrink-0",
                                                     activeTab === key
-                                                        ? "border-indigo-600 text-indigo-600 bg-indigo-50/50"
+                                                        ? "border-[#1F4D47] text-[#1F4D47] bg-[#EEF3F1]"
                                                         : "border-transparent text-slate-600 hover:text-slate-800 hover:bg-slate-50"
                                                 )}
                                             >
@@ -1212,7 +1368,7 @@ export default function AnalyseIAPage() {
                                             <ObjectionHandlingSection objections={displayedAnalysis.objectionHandling} />
                                         )}
                                         {activeTab === "coaching" && (
-                                            <SdrCoachingSection actions={displayedAnalysis.sdrCoachingActions} />
+                                            <SdrCoachingSection actions={displayedAnalysis.sdrCoachingActions} sdrOptions={sdrOptions} />
                                         )}
                                         {activeTab === "recommendations" && (
                                             <RecommendationsSection

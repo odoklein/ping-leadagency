@@ -8,6 +8,8 @@ import {
     validateRequest,
 } from '@/lib/api-utils';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
+import { mistralFetch } from '@/lib/ai/mistral';
 
 // ============================================
 // SCHEMA
@@ -23,11 +25,119 @@ const runAnalysisSchema = z.object({
 });
 
 // ============================================
-// OpenAI Config
+// LLM Config — Mistral Large
 // ============================================
 
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
-const OPENAI_MODEL = 'gpt-4o';
+const MISTRAL_MODEL = 'mistral-large-latest';
+
+// ============================================
+// LLM RESPONSE SCHEMA — validated before persisting/rendering.
+// Enums use .catch() so an unexpected value from the model degrades to a
+// sane default instead of throwing and crashing the page at render time.
+// ============================================
+
+const impactEnum = z.enum(['HIGH', 'MEDIUM', 'LOW']);
+const severityEnum = z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']);
+const priorityEnum = z.enum(['P1', 'P2', 'P3']);
+
+const topInsightSchema = z.object({
+    insight: z.string().default(''),
+    evidence: z.array(z.string()).default([]),
+    impact: impactEnum.catch('MEDIUM'),
+    confidence: z.number().min(0).max(1).catch(0.5),
+});
+
+const rootCauseSchema = z.object({
+    cause: z.string().default(''),
+    evidence: z.array(z.string()).default([]),
+    affectedArea: z.enum(['script', 'icp', 'sdr_skill', 'market', 'process']).catch('process'),
+    severity: severityEnum.catch('MEDIUM'),
+});
+
+const scriptImprovementSchema = z.object({
+    section: z.enum(['intro', 'discovery', 'objection', 'closing']).catch('discovery'),
+    current: z.string().default(''),
+    suggested: z.string().default(''),
+    rationale: z.string().default(''),
+    expectedLift: z.string().default(''),
+});
+
+const icpRefinementSchema = z.object({
+    dimension: z.string().default(''),
+    finding: z.string().default(''),
+    action: z.string().default(''),
+    confidence: z.number().min(0).max(1).catch(0.5),
+});
+
+const objectionHandlingSchema = z.object({
+    objection: z.string().default(''),
+    frequency: impactEnum.catch('MEDIUM'),
+    currentResponse: z.string().default(''),
+    suggestedResponse: z.string().default(''),
+    whyItWorks: z.string().default(''),
+    evidence: z.array(z.string()).default([]),
+});
+
+const sdrCoachingActionSchema = z.object({
+    sdrName: z.string().nullable().optional().default(null),
+    issue: z.string().default(''),
+    action: z.string().default(''),
+    priority: priorityEnum.catch('P2'),
+    metric: z.string().default(''),
+});
+
+const recommendationSchema = z.object({
+    id: z.string().default(() => `rec-${Math.random().toString(36).slice(2, 8)}`),
+    title: z.string().default(''),
+    priority: priorityEnum.catch('P2'),
+    category: z.enum(['script', 'icp', 'process', 'coaching', 'outreach', 'qualification']).catch('process'),
+    expectedImpact: z.string().default(''),
+    confidenceScore: z.number().min(0).max(1).catch(0.5),
+    rationale: z.string().default(''),
+    citations: z.array(z.string()).default([]),
+    actionSteps: z.array(z.string()).default([]),
+});
+
+const expectedImpactSchema = z.object({
+    metric: z.string().default(''),
+    current: z.string().default(''),
+    projected: z.string().default(''),
+    confidence: z.number().min(0).max(1).catch(0.5),
+});
+
+const deltaInsightsSchema = z
+    .object({
+        improved: z.array(z.string()).default([]),
+        degraded: z.array(z.string()).default([]),
+        new: z.array(z.string()).default([]),
+        resolved: z.array(z.string()).default([]),
+    })
+    .nullable()
+    .default(null);
+
+const trendAlertSchema = z.object({
+    metric: z.string().default(''),
+    trend: z.enum(['UP', 'DOWN', 'STABLE', 'VOLATILE']).catch('STABLE'),
+    severity: z.enum(['CRITICAL', 'WARNING', 'INFO']).catch('INFO'),
+    description: z.string().default(''),
+});
+
+const analysisResponseSchema = z.object({
+    executiveSummary: z.string().default(''),
+    confidenceScore: z.number().min(0).max(1).catch(0.5),
+    dataQualityScore: z.number().min(0).max(1).catch(0.5),
+    uncertainties: z.array(z.string()).default([]),
+    topInsights: z.array(topInsightSchema).default([]),
+    rootCauses: z.array(rootCauseSchema).default([]),
+    scriptImprovements: z.array(scriptImprovementSchema).default([]),
+    icpRefinements: z.array(icpRefinementSchema).default([]),
+    objectionHandling: z.array(objectionHandlingSchema).default([]),
+    sdrCoachingActions: z.array(sdrCoachingActionSchema).default([]),
+    recommendations: z.array(recommendationSchema).default([]),
+    expectedImpacts: z.array(expectedImpactSchema).default([]),
+    deltaInsights: deltaInsightsSchema,
+    trendAlerts: z.array(trendAlertSchema).default([]),
+});
 
 function safeParseJsonFromModel(content: string): any {
     const trimmed = content.trim();
@@ -65,7 +175,12 @@ async function ingestData(
     const actionWhere: any = {
         createdAt: { gte: weekStart, lte: weekEnd },
     };
-    if (missionIds.length > 0) actionWhere.campaign = { missionId: { in: missionIds } };
+    // campaign-side filters (mission + client) combine into a single `campaign.is` clause
+    // so both can apply together (e.g. "this client's missions, but only mission X").
+    const campaignFilter: Prisma.CampaignWhereInput = {};
+    if (missionIds.length > 0) campaignFilter.missionId = { in: missionIds };
+    if (clientIds.length > 0) campaignFilter.mission = { clientId: { in: clientIds } };
+    if (Object.keys(campaignFilter).length > 0) actionWhere.campaign = { is: campaignFilter };
     if (sdrIds.length > 0) actionWhere.sdrId = { in: sdrIds };
 
     // Fetch actions with enrichment data
@@ -95,7 +210,9 @@ async function ingestData(
     });
 
     // Mission context (ICP, scripts, pitch)
-    const missionQuery = missionIds.length > 0 ? { id: { in: missionIds } } : {};
+    const missionQuery: Prisma.MissionWhereInput = {};
+    if (missionIds.length > 0) missionQuery.id = { in: missionIds };
+    if (clientIds.length > 0) missionQuery.clientId = { in: clientIds };
     const missions = await prisma.mission.findMany({
         where: missionQuery,
         include: {
@@ -154,7 +271,7 @@ async function ingestData(
             result: a.result,
             note: a.note!.slice(0, 300),
             company: a.company?.name,
-            contactTitle: a.contact?.jobTitle,
+            contactTitle: a.contact?.title,
             sdr: a.sdr?.name,
         }));
 
@@ -439,8 +556,8 @@ Important:
 
 export const POST = withErrorHandler(async (request: NextRequest) => {
     const session = await requireRole(['MANAGER', 'BUSINESS_DEVELOPER'], request);
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) return errorResponse('OPENAI_API_KEY non configurée', 503);
+    const apiKey = process.env.MISTRAL_API_KEY;
+    if (!apiKey) return errorResponse('MISTRAL_API_KEY non configurée', 503);
 
     const body = await validateRequest(request, runAnalysisSchema);
 
@@ -500,46 +617,52 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
         // 3. Build prompt
         const userPrompt = buildAnalysisPrompt(ingestedData, priorSummary);
 
-        // 4. Call OpenAI
-        const openAiResponse = await fetch(OPENAI_API_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-                model: OPENAI_MODEL,
-                messages: [
-                    {
-                        role: 'system',
-                        content: `Tu es un analyste stratégique expert en prospection commerciale B2B.
+        // 4. Call Mistral Large
+        const mistralResponse = await mistralFetch(apiKey, {
+            model: MISTRAL_MODEL,
+            messages: [
+                {
+                    role: 'system',
+                    content: `Tu es un analyste stratégique expert en prospection commerciale B2B.
 Tu analyses des données de terrain (notes, transcriptions, métriques) et produis des recommandations actionnables avec preuves.
 Tu raisonnes en plusieurs étapes avant de conclure. Tu es précis, factuel et tu signales explicitement tes incertitudes.
 Tu réponds toujours en JSON valide strictement conformé au format demandé.`,
-                    },
-                    { role: 'user', content: userPrompt },
-                ],
-                temperature: 0.3,
-                max_tokens: 6000,
-                response_format: { type: 'json_object' },
-            }),
+                },
+                { role: 'user', content: userPrompt },
+            ],
+            temperature: 0.3,
+            max_tokens: 6000,
+            response_format: { type: 'json_object' },
         });
 
-        if (!openAiResponse.ok) {
-            const err = await openAiResponse.json().catch(() => ({}));
-            throw new Error(`OpenAI API error: ${err?.error?.message || openAiResponse.statusText}`);
+        if (!mistralResponse.ok) {
+            const err = await mistralResponse.json().catch(() => ({}));
+            throw new Error(`Mistral API error: ${err?.error?.message || mistralResponse.statusText}`);
         }
 
-        const openAiResult = await openAiResponse.json();
-        const content = openAiResult.choices?.[0]?.message?.content;
-        if (!content) throw new Error('Réponse vide de OpenAI');
+        const mistralResult = await mistralResponse.json();
+        const content = mistralResult.choices?.[0]?.message?.content;
+        if (!content) throw new Error('Réponse vide de Mistral');
 
-        let parsed: any;
+        let rawParsed: unknown;
         try {
-            parsed = safeParseJsonFromModel(content);
+            rawParsed = safeParseJsonFromModel(content);
         } catch {
-            throw new Error('Impossible de parser la réponse JSON de OpenAI');
+            throw new Error('Impossible de parser la réponse JSON de Mistral');
         }
+
+        // Validate shape before persisting — unexpected enum values fall back to
+        // sane defaults (via .catch()) instead of crashing the page at render time.
+        const validation = analysisResponseSchema.safeParse(rawParsed);
+        if (!validation.success) {
+            throw new Error(
+                `Réponse de Mistral non conforme au format attendu: ${validation.error.issues
+                    .slice(0, 3)
+                    .map((i) => `${i.path.join('.')}: ${i.message}`)
+                    .join('; ')}`
+            );
+        }
+        const parsed = validation.data;
 
         const durationMs = Date.now() - startTime;
 
@@ -549,23 +672,23 @@ Tu réponds toujours en JSON valide strictement conformé au format demandé.`,
             data: {
                 status: 'completed',
                 dataSnapshot: ingestedData.dataSnapshot as any,
-                executiveSummary: parsed.executiveSummary || '',
-                confidenceScore: Math.min(1, Math.max(0, parsed.confidenceScore || 0.5)),
-                dataQualityScore: Math.min(1, Math.max(0, parsed.dataQualityScore || 0.5)),
-                uncertainties: Array.isArray(parsed.uncertainties) ? parsed.uncertainties : [],
-                topInsights: parsed.topInsights || [],
-                rootCauses: parsed.rootCauses || [],
-                scriptImprovements: parsed.scriptImprovements || [],
-                icpRefinements: parsed.icpRefinements || [],
-                objectionHandling: parsed.objectionHandling || [],
-                sdrCoachingActions: parsed.sdrCoachingActions || [],
-                recommendations: parsed.recommendations || [],
-                expectedImpacts: parsed.expectedImpacts || [],
+                executiveSummary: parsed.executiveSummary,
+                confidenceScore: parsed.confidenceScore,
+                dataQualityScore: parsed.dataQualityScore,
+                uncertainties: parsed.uncertainties,
+                topInsights: parsed.topInsights,
+                rootCauses: parsed.rootCauses,
+                scriptImprovements: parsed.scriptImprovements,
+                icpRefinements: parsed.icpRefinements,
+                objectionHandling: parsed.objectionHandling,
+                sdrCoachingActions: parsed.sdrCoachingActions,
+                recommendations: parsed.recommendations,
+                expectedImpacts: parsed.expectedImpacts,
                 priorAnalysisId: priorAnalysis?.id || null,
-                deltaInsights: parsed.deltaInsights || null,
-                trendAlerts: parsed.trendAlerts || null,
-                modelUsed: OPENAI_MODEL,
-                tokensUsed: openAiResult.usage?.total_tokens || null,
+                deltaInsights: parsed.deltaInsights ?? Prisma.JsonNull,
+                trendAlerts: parsed.trendAlerts,
+                modelUsed: MISTRAL_MODEL,
+                tokensUsed: mistralResult.usage?.total_tokens || null,
                 durationMs,
             },
         });

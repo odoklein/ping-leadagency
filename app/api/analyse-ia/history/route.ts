@@ -33,6 +33,7 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
                 confidenceScore: true,
                 dataQualityScore: true,
                 missionIds: true,
+                clientIds: true,
                 sdrIds: true,
                 recommendations: true,
                 expectedImpacts: true,
