@@ -22,6 +22,8 @@ interface DrawerProps {
     closeOnEscape?: boolean;
     className?: string;
     contentClassName?: string;
+    /** Extra classes for the overlay/scrim behind the panel. */
+    overlayClassName?: string;
     footer?: React.ReactNode;
     /** Helper link shown above footer (e.g. "Learn more about...") */
     footerHelperLink?: { href: string; label: string };
@@ -75,6 +77,7 @@ export function Drawer({
     closeOnEscape = true,
     className,
     contentClassName,
+    overlayClassName,
     footer,
     footerHelperLink,
     headerCentered = false,
@@ -159,7 +162,8 @@ export function Drawer({
                 <div
                     className={cn(
                         "absolute inset-0 bg-black/15 backdrop-blur-[1px] cursor-pointer transition-opacity duration-300",
-                        isClosing ? "animate-fade-out" : "animate-fade-in"
+                        isClosing ? "animate-fade-out" : "animate-fade-in",
+                        overlayClassName
                     )}
                     onClick={handleOverlayClickClose}
                     aria-hidden="true"
@@ -180,6 +184,8 @@ export function Drawer({
                         : cn("left-0", isClosing ? "animate-slide-out-left" : "animate-slide-in-left"),
                     !modal && "pointer-events-auto",
                     SIZES[size],
+                    // State hook so a consumer's own shell CSS can drive its exit animation.
+                    isClosing ? "is-closing" : "is-open",
                     className
                 )}
             >
