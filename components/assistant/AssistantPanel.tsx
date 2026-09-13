@@ -204,15 +204,17 @@ const MessageRow = memo(function MessageRow({
                 {message.isError ? <p className="cp-md-p">{message.content}</p> : <Markdown content={message.content} />}
             </div>
 
-            <div className="cp-actions">
-                <button type="button" onClick={() => onCopy(message)} className="cp-action" aria-label="Copier la réponse">
-                    {isCopied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-                    <span>{isCopied ? "Copié" : "Copier"}</span>
-                </button>
+            <div className={cn("cp-actions", message.isError && "is-visible")}>
+                {!message.isError && (
+                    <button type="button" onClick={() => onCopy(message)} className="cp-action" aria-label="Copier la réponse">
+                        {isCopied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                        <span>{isCopied ? "Copié" : "Copier"}</span>
+                    </button>
+                )}
                 {canRegenerate && (
-                    <button type="button" onClick={onRegenerate} className="cp-action" aria-label="Régénérer la réponse">
+                    <button type="button" onClick={onRegenerate} className="cp-action" aria-label="Relancer la demande">
                         <RefreshCw className="h-3.5 w-3.5" />
-                        <span>Régénérer</span>
+                        <span>{message.isError ? "Réessayer" : "Régénérer"}</span>
                     </button>
                 )}
             </div>
@@ -454,13 +456,13 @@ export default function AssistantPanel({ isOpen, onClose, role, pathname }: Assi
                 void loadConversations(json.data.conversationId ?? conversationId ?? undefined);
             } catch (error) {
                 if ((error as Error)?.name === "AbortError") return;
-                const detail = error instanceof Error ? error.message : "erreur inconnue";
-                setMessages((prev) => [
-                    ...prev,
-                    makeMessage("assistant", `Je n'ai pas pu répondre (${detail}). Réessayez dans quelques secondes.`, {
-                        isError: true,
-                    }),
-                ]);
+                // The route already returns a user-facing French message for provider
+                // failures; show it as-is rather than wrapping it in more apology.
+                const detail =
+                    error instanceof Error && error.message
+                        ? error.message
+                        : "L'assistant n'a pas pu répondre. Réessayez.";
+                setMessages((prev) => [...prev, makeMessage("assistant", detail, { isError: true })]);
             } finally {
                 abortRef.current = null;
                 setIsSending(false);

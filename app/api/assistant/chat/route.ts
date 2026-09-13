@@ -24,6 +24,7 @@ import {
 } from "@/lib/assistant/memory";
 import { buildManagerLiveDataContext } from "@/lib/assistant/managerLiveData";
 import { buildDocsContext } from "@/lib/assistant/docs/loader";
+import { MistralError } from "@/lib/ai/mistral";
 import {
     ToolAuthorizationError,
     buildAIRequestContext,
@@ -230,6 +231,12 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
             conversationId,
         });
     } catch (error) {
+        // Provider failures (rate limit, tier, outage) are not server bugs: surface
+        // the real status and an actionable message instead of a blanket 500.
+        if (error instanceof MistralError) {
+            console.warn("[assistant.chat] provider error:", error.code, error.message);
+            return errorResponse(error.userMessage, error.status === 401 ? 500 : error.status);
+        }
         console.error("Assistant chat error:", error);
         return errorResponse(
             error instanceof Error ? error.message : "Assistant request failed",

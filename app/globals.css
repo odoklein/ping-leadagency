@@ -5127,8 +5127,16 @@ textarea::placeholder {
     transition: opacity 140ms ease;
 }
 .cp-row-assistant:hover .cp-actions,
-.cp-row-assistant:focus-within .cp-actions { opacity: 1; }
+.cp-row-assistant:focus-within .cp-actions,
+.cp-actions.is-visible { opacity: 1; }
 @media (hover: none) { .cp-actions { opacity: 1; } }
+
+.cp-answer-error {
+    padding: 9px 12px;
+    border: 1px solid #FBD3CE;
+    border-radius: 12px;
+    background: #FEF4F2;
+}
 
 .cp-action {
     display: inline-flex;
