@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MessageCircle } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import AssistantPanel from "@/components/assistant/AssistantPanel";
 
+/**
+ * Top-bar entry point for the AI assistant.
+ * Sits next to the other topbar controls and matches their 32px sizing.
+ */
 export function AssistantLauncher() {
     const [isOpen, setIsOpen] = useState(false);
     const { data: session } = useSession();
@@ -30,24 +34,19 @@ export function AssistantLauncher() {
                 type="button"
                 onClick={() => setIsOpen(true)}
                 className={cn(
-                    "relative w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200",
-                    "border border-slate-200 bg-white text-slate-500",
-                    "hover:border-[#2890F8]/40 hover:text-[#2890F8] hover:bg-[#e6f0fa] hover:shadow-md hover:scale-105",
-                    "active:scale-95",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2890F8]/40 focus-visible:ring-offset-2",
-                    isOpen && "border-[#2890F8] text-[#2890F8] bg-[#e6f0fa] shadow-sm"
+                    "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2 text-[12px] font-semibold transition-colors duration-150 sm:px-2.5",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2890F8]/40 focus-visible:ring-offset-1",
+                    isOpen
+                        ? "border-[#2890F8] bg-[#E8F2FE] text-[#1A75CE]"
+                        : "border-[#E8EBF0] bg-white text-[#5A5A7A] hover:border-[#2890F8]/45 hover:bg-[#E8F2FE] hover:text-[#1A75CE]"
                 )}
-                title="Assistant CRM (Ctrl/Cmd+Shift+K)"
-                aria-label="Ouvrir l'assistant CRM (Ctrl+Shift+K)"
+                title="Assistant Ping (Ctrl/Cmd+Shift+K)"
+                aria-label="Ouvrir l'assistant Ping"
                 aria-expanded={isOpen}
                 aria-haspopup="dialog"
             >
-                <MessageCircle className="w-4 h-4" />
-                {/* Active indicator dot */}
-                <span className={cn(
-                    "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#2890F8] border border-white transition-all duration-300",
-                    isOpen ? "scale-100 opacity-100" : "scale-0 opacity-0"
-                )} />
+                <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                <span className="hidden lg:inline">Assistant</span>
             </button>
 
             <AssistantPanel

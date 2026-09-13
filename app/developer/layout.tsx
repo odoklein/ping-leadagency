@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "@/components/ui/NotificationBell";
+import { AssistantLauncher } from "@/components/ui/AssistantLauncher";
 import { ElanLogo } from "@/components/brand/ElanLogo";
 
 const NAV_ITEMS = [
@@ -137,7 +138,10 @@ export default function DeveloperLayout({ children }: { children: React.ReactNod
                         <span>/</span>
                         <span className="capitalize">{pathname.split("/").pop()?.replace("-", " ")}</span>
                     </div>
-                    <NotificationBell />
+                    <div className="flex items-center gap-2">
+                        <AssistantLauncher />
+                        <NotificationBell />
+                    </div>
                 </header>
                 <div className="max-w-6xl mx-auto p-6 w-full">{children}</div>
             </main>
