@@ -5,7 +5,7 @@ import { MessageCircle } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import AssistantDrawer from "@/components/assistant/AssistantDrawer";
+import AssistantPanel from "@/components/assistant/AssistantPanel";
 
 export function AssistantLauncher() {
     const [isOpen, setIsOpen] = useState(false);
@@ -50,7 +50,7 @@ export function AssistantLauncher() {
                 )} />
             </button>
 
-            <AssistantDrawer
+            <AssistantPanel
                 isOpen={isOpen}
                 onClose={() => setIsOpen(false)}
                 role={session?.user?.role}

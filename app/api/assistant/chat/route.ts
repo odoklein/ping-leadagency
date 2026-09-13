@@ -15,9 +15,6 @@ import {
     AssistantRuntimeContext,
     buildAssistantRuntimeContextPrompt,
 } from "@/lib/assistant/context";
-import { openaiChatComplete } from "@/lib/ai/openai";
-import { geminiGenerate } from "@/lib/ai/gemini";
-import { mistralFetch, getMistralModel } from "@/lib/ai/mistral";
 import { prisma } from "@/lib/prisma";
 import {
     buildMemoryContextSnippet,
@@ -27,6 +24,13 @@ import {
 } from "@/lib/assistant/memory";
 import { buildManagerLiveDataContext } from "@/lib/assistant/managerLiveData";
 import { buildDocsContext } from "@/lib/assistant/docs/loader";
+import {
+    ToolAuthorizationError,
+    buildAIRequestContext,
+    buildToolUsagePrompt,
+    describeScopeForPrompt,
+    runToolLoop,
+} from "@/lib/ai/tools";
 
 const messageSchema = z.object({
     role: z.enum(["user", "assistant"]),
@@ -48,12 +52,14 @@ const chatRequestSchema = z.object({
     temperature: z.number().min(0).max(1).optional(),
 });
 
-function buildSystemPrompt(
-    runtime?: AssistantRuntimeContext,
-    memoryContext?: string
-): string {
+function buildSystemPrompt(parts: {
+    runtime?: AssistantRuntimeContext;
+    memoryContext?: string;
+    scopeContext: string;
+    toolContext: string;
+}): string {
     const base = getCaptainAssistantSystemPrompt();
-    const runtimeContext = buildAssistantRuntimeContextPrompt(runtime);
+    const runtimeContext = buildAssistantRuntimeContextPrompt(parts.runtime);
     const safety = `Additional constraints:
 - Keep answers concise and actionable.
 - If process-oriented, use numbered steps.
@@ -64,7 +70,16 @@ function buildSystemPrompt(
 - When live operational data is provided in context, answer with concrete facts first (names, counts, missions), then optional guidance.
 - Do not replace factual answer with generic "go to this page" instructions if data is already available.`;
 
-    return [base, runtimeContext, memoryContext, safety].filter(Boolean).join("\n\n");
+    return [
+        base,
+        runtimeContext,
+        parts.scopeContext,
+        parts.toolContext,
+        parts.memoryContext,
+        safety,
+    ]
+        .filter(Boolean)
+        .join("\n\n");
 }
 
 function truncateConversation(
@@ -76,66 +91,9 @@ function truncateConversation(
     }));
 }
 
-function serializeConversation(
-    messages: Array<{ role: "user" | "assistant"; content: string }>
-): string {
-    return messages
-        .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
-        .join("\n\n");
-}
-
-async function callMistralFallback(
-    systemPrompt: string,
-    messages: Array<{ role: "user" | "assistant"; content: string }>,
-    temperature = 0.35
-) {
-    const apiKey = process.env.MISTRAL_API_KEY;
-    if (!apiKey) {
-        throw new Error("Mistral fallback unavailable (missing MISTRAL_API_KEY)");
-    }
-
-    const response = await mistralFetch(apiKey, {
-        messages: [{ role: "system", content: systemPrompt }, ...messages],
-        temperature,
-        max_tokens: 1200,
-    });
-
-    if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(
-            (error as { error?: { message?: string } })?.error?.message ||
-                "Mistral request failed"
-        );
-    }
-
-    const result = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-        usage?: {
-            prompt_tokens?: number;
-            completion_tokens?: number;
-            total_tokens?: number;
-        };
-    };
-
-    const text = result.choices?.[0]?.message?.content?.trim();
-    if (!text) throw new Error("Mistral returned empty answer");
-
-    return {
-        answer: text,
-        provider: "mistral",
-        usage: result.usage
-            ? {
-                promptTokens: result.usage.prompt_tokens,
-                completionTokens: result.usage.completion_tokens,
-                totalTokens: result.usage.total_tokens,
-            }
-            : undefined,
-    };
-}
-
 export const POST = withErrorHandler(async (request: NextRequest) => {
     const session = await requireRole(
-        ["SDR", "MANAGER", "CLIENT", "BUSINESS_DEVELOPER", "DEVELOPER"],
+        ["SDR", "BOOKER", "MANAGER", "CLIENT", "BUSINESS_DEVELOPER", "DEVELOPER", "COMMERCIAL"],
         request
     );
 
@@ -144,9 +102,24 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     const messages = truncateConversation(payload.messages);
     const latestUserQuestion =
         [...messages].reverse().find((m) => m.role === "user")?.content || "";
-    const temperature = payload.temperature ?? 0.35;
-    const openaiKey = process.env.OPENAI_API_KEY;
-    const geminiKey = process.env.GEMINI_API_KEY;
+    const temperature = payload.temperature ?? 0.3;
+
+    const apiKey = process.env.MISTRAL_API_KEY;
+    if (!apiKey) {
+        return errorResponse("Aucun fournisseur IA configure (MISTRAL_API_KEY).", 500);
+    }
+
+    // Resolve the caller's data perimeter once. Every tool call is bound to it.
+    let aiContext;
+    try {
+        aiContext = await buildAIRequestContext(session);
+    } catch (error) {
+        if (error instanceof ToolAuthorizationError) {
+            return errorResponse(error.message, 403);
+        }
+        throw error;
+    }
+
     const fallbackConversationId =
         payload.conversationId ||
         payload.sessionId ||
@@ -160,14 +133,17 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     });
     const preferences = ((user?.preferences as Record<string, unknown>) || {});
     const memoryStore = normalizeAssistantMemoryStore(preferences.assistantMemory);
-    const conversationId = payload.conversationId || memoryStore.activeConversationId || fallbackConversationId;
+    const conversationId =
+        payload.conversationId || memoryStore.activeConversationId || fallbackConversationId;
     const memoryContext = buildMemoryContextSnippet(memoryStore, conversationId);
+
     const managerLiveContext =
-        session.user.role === "MANAGER" && latestUserQuestion
+        aiContext.isGlobalScope && latestUserQuestion
             ? await buildManagerLiveDataContext(latestUserQuestion)
             : "";
 
-    // Inject how-to docs relevant to the user's current page + question
+    // Docs stay pre-injected for the common "how do I…" case; search_ping_help
+    // remains available when the model needs to dig further.
     const docsContext = latestUserQuestion
         ? buildDocsContext(
               payload.context?.pathname || "",
@@ -176,92 +152,36 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
           )
         : "";
 
-    const systemPrompt = buildSystemPrompt(
-        payload.context,
-        [memoryContext, docsContext, managerLiveContext].filter(Boolean).join("\n\n")
-    );
-
-    if (!openaiKey && !geminiKey && !process.env.MISTRAL_API_KEY) {
-        return errorResponse(
-            "No AI provider configured (OPENAI_API_KEY, GEMINI_API_KEY, or MISTRAL_API_KEY).",
-            500
-        );
-    }
+    const systemPrompt = buildSystemPrompt({
+        runtime: payload.context,
+        memoryContext: [memoryContext, docsContext, managerLiveContext]
+            .filter(Boolean)
+            .join("\n\n"),
+        scopeContext: describeScopeForPrompt(aiContext),
+        toolContext: buildToolUsagePrompt(aiContext),
+    });
 
     try {
-        let answer = "";
-        let provider = "";
-        let model: string | undefined;
-        let usage:
-            | {
-                promptTokens?: number;
-                completionTokens?: number;
-                totalTokens?: number;
-            }
-            | undefined;
+        const result = await runToolLoop({
+            systemPrompt,
+            messages,
+            ctx: aiContext,
+            apiKey,
+            temperature,
+        });
 
-        if (openaiKey) {
-            const result = await openaiChatComplete(
-                openaiKey,
-                [{ role: "system", content: systemPrompt }, ...messages],
-                {
-                    temperature,
-                    maxTokens: 1200,
-                }
-            );
-            answer = result.text;
-            provider = "openai";
-            model = result.model ?? "gpt-4.1-mini";
-            usage = result.usage;
-
-            console.info("[assistant.chat]", {
-                provider,
-                promptVersion: ASSISTANT_PROMPT_VERSION,
-                sessionId: payload.sessionId ?? null,
-                conversationId,
-                durationMs: Date.now() - startedAt,
-                tokens: result.usage?.totalTokens ?? null,
-            });
-        } else if (geminiKey) {
-            const transcript = serializeConversation(messages);
-            const gemini = await geminiGenerate(
-                geminiKey,
-                systemPrompt,
-                transcript,
-                {
-                    temperature,
-                    maxOutputTokens: 1200,
-                }
-            );
-            answer = gemini.text;
-            provider = "gemini";
-            model = "gemini-2.0-flash";
-            usage = gemini.usage;
-
-            console.info("[assistant.chat]", {
-                provider,
-                promptVersion: ASSISTANT_PROMPT_VERSION,
-                sessionId: payload.sessionId ?? null,
-                conversationId,
-                durationMs: Date.now() - startedAt,
-                tokens: gemini.usage?.totalTokens ?? null,
-            });
-        } else {
-            const mistral = await callMistralFallback(systemPrompt, messages, temperature);
-            answer = mistral.answer;
-            provider = mistral.provider;
-            usage = mistral.usage;
-            model = getMistralModel();
-
-            console.info("[assistant.chat]", {
-                provider,
-                promptVersion: ASSISTANT_PROMPT_VERSION,
-                sessionId: payload.sessionId ?? null,
-                conversationId,
-                durationMs: Date.now() - startedAt,
-                tokens: usage?.totalTokens ?? null,
-            });
-        }
+        console.info("[assistant.chat]", {
+            provider: result.provider,
+            model: result.model,
+            promptVersion: ASSISTANT_PROMPT_VERSION,
+            role: aiContext.role,
+            sessionId: payload.sessionId ?? null,
+            conversationId,
+            iterations: result.iterations,
+            toolCalls: result.toolCalls.map((t) => `${t.tool}:${t.ok ? "ok" : t.errorCode}`),
+            durationMs: Date.now() - startedAt,
+            tokens: result.usage.totalTokens,
+        });
 
         if (latestUserQuestion) {
             const savedStore = upsertConversation(
@@ -275,7 +195,7 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
                     },
                     {
                         role: "assistant",
-                        content: answer,
+                        content: result.answer,
                         createdAt: new Date().toISOString(),
                     },
                 ],
@@ -301,10 +221,11 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
         }
 
         return successResponse({
-            answer,
-            provider,
-            model,
-            usage,
+            answer: result.answer,
+            provider: result.provider,
+            model: result.model,
+            usage: result.usage,
+            toolCalls: result.toolCalls,
             promptVersion: ASSISTANT_PROMPT_VERSION,
             conversationId,
         });
