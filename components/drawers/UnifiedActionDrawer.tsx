@@ -1335,7 +1335,8 @@ export function UnifiedActionDrawer({
             title={displayName}
             description={missionName ? `Mission : ${missionName}` : undefined}
             size="lg"
-            className="unified-action-drawer top-0 bottom-0 right-0 rounded-none border-y-0 border-r-0 border-l border-[#dfe7e3] bg-white shadow-[-16px_0_40px_rgba(12,59,56,0.12)]"
+            className="unified-action-drawer uad-shell bg-white"
+            overlayClassName="uad-scrim"
             contentClassName="!p-4 !bg-white"
         >
             <style>{`
