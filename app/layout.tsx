@@ -27,11 +27,15 @@ const monoFont = DM_Mono({
 export const metadata: Metadata = {
   title: "Ping | Plateforme d'exécution commerciale",
   description: "La plateforme d'exécution commerciale qui transforme l'activité en résultats.",
+  // The square mark, not the wordmark: /brand/ping-logo-blue.png is 300x86 and
+  // becomes an unreadable smear at 16px. app/favicon.ico carries per-size
+  // artwork (bigger petals below 48px); the SVG is used wherever it is supported.
   icons: {
     icon: [
-      { url: "/brand/ping-logo-blue.png", type: "image/png" },
+      { url: "/brand/ping-icon.svg", type: "image/svg+xml" },
+      { url: "/brand/ping-icon.png", type: "image/png", sizes: "512x512" },
     ],
-    apple: "/brand/ping-logo-blue.png",
+    apple: "/brand/ping-icon-180.png",
   },
 };
 

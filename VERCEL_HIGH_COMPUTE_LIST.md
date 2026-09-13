@@ -70,7 +70,7 @@ Then in **Logs**, filter or search for `PERF` to see which requests were slow. V
 | **Email sync (inline)** | `app/api/email/sync/route.ts` + `lib/email/services/sync-service.ts` | When Redis is unavailable, sync runs **inline** for **all** active mailboxes in a loop. Each `syncMailbox()` does IMAP I/O + many DB reads/writes (up to `maxThreads: 100`). Single request can run very long. |
 | **Single mailbox sync** | `app/api/email/mailboxes/[id]/sync/route.ts` | Calls `emailSyncService.syncMailbox()` directly. Full sync with high `maxThreads` can exceed function timeout. |
 | **Analytics report PDF** | `app/api/analytics/report/pdf/route.ts` | 1) `getAnalyticsReportData()` (multiple aggregates + raw queries). 2) **Mistral API** call for AI summary. 3) **Puppeteer/Chromium** launch, render HTML, generate PDF. Browser spin-up + render is heavy and easy to timeout on Vercel. |
-| **Client reporting PDF** | `app/api/client/reporting/pdf/route.ts` | 1) `getReportData()` (several findMany/aggregates). 2) **Puppeteer/Chromium** to generate PDF. Same Puppeteer cost as above. |
+| **Client daily report generation** | `app/api/client/reporting/daily/generate/route.ts` + `lib/reporting/client-daily/generate.ts` | 1) Metrics snapshot (several findMany over 90 days of actions). 2) One **Mistral Large** call (~10-25s, `maxDuration = 60`). Lazily triggered on the first visit of the day and cached per client per day, so at most one run per client per day. The former pdfkit/Puppeteer client PDF route is gone: the download is now a browser print of `/client/portal/reporting/print`. |
 
 ---
 

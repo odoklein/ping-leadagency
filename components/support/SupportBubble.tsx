@@ -22,7 +22,8 @@ function initialsFor(name: string | null | undefined): string {
 interface AvatarRingProps {
     name: string | null | undefined;
     size?: number;
-    status?: "online" | "away" | "offline";
+    /** "none" renders no presence dot — use it wherever real presence is unknown. */
+    status?: "online" | "away" | "offline" | "none";
     theme?: SupportTheme;
 }
 
@@ -55,7 +56,7 @@ export function AvatarRing({ name, size = 28, status = "online", theme = "light"
             >
                 {initialsFor(name)}
             </div>
-            {size >= 28 && (
+            {size >= 28 && status !== "none" && (
                 <span
                     style={{
                         position: "absolute",

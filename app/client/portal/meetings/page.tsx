@@ -1,16 +1,18 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useSession } from "next-auth/react";
 import { Badge, useToast, DateTimePicker } from "@/components/ui";
 import {
   Calendar, Search, X, ThumbsUp, Minus, ThumbsDown, XCircle,
-  Mail, Phone, Linkedin, Download, Check, Loader2, Eye,
+  Mail, Phone, Download, Check, Loader2, Eye,
   MessageSquare, Edit3, Clock, FileSpreadsheet, AlertTriangle,
   CalendarClock, Send, Building2, MapPin, Trash2, Video,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getMeetingCancellationLabel, MEETING_CANCELLATION_REASONS } from "@/lib/constants/meetingCancellationReasons";
+import { DISPLAY_TZ } from "@/lib/date";
 import { MeetingsSkeleton } from "@/components/client/skeletons";
 
 /* ═══════════════════════════════════════════════════════════════
@@ -51,10 +53,8 @@ const tk = {
    GLOBAL CSS  — injected once at runtime
 ═══════════════════════════════════════════════════════════════ */
 const GLOBAL_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Inter:wght@300;400;500;600;700&display=swap');
-
 .cp-page *, .cp-page *::before, .cp-page *::after { box-sizing: border-box; }
-.cp-page { font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+.cp-page { -webkit-font-smoothing: antialiased; }
 
 /* ── Keyframes ── */
 @keyframes cp-fade-up   { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:none; } }
@@ -71,42 +71,6 @@ const GLOBAL_CSS = `
 .cp-enter-scale { animation: cp-scale-in 0.28s cubic-bezier(0.16,1,0.3,1) both; }
 .cp-enter-fade  { animation: cp-fade-in  0.25s ease both; }
 
-/* ── Cards ── */
-.cp-card {
-  background: ${tk.surface};
-  border: 1px solid ${tk.border};
-  border-radius: 16px;
-  transition: box-shadow 0.25s ease, border-color 0.22s ease;
-}
-.cp-card > .cp-card-stripe { border-radius: 16px 16px 0 0; }
-.cp-card > *:last-child { border-radius: 0 0 16px 16px; }
-.cp-card:hover {
-  box-shadow: 0 8px 32px -8px rgba(0,0,0,0.11);
-  border-color: ${tk.borderStrong};
-}
-.cp-card-upcoming:hover {
-  box-shadow: 0 8px 32px -8px rgba(12,59,56,0.14);
-  border-color: rgba(12,59,56,0.2);
-}
-
-/* ── Stat button ── */
-.cp-stat {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px 18px;
-  text-align: left;
-  cursor: pointer;
-  font-family: inherit;
-  border: 1px solid ${tk.border};
-  border-radius: 14px;
-  background: ${tk.surface};
-  transition: all 0.2s cubic-bezier(0.16,1,0.3,1);
-  outline: none;
-}
-.cp-stat:hover { transform: translateY(-2px); box-shadow: 0 6px 20px -6px rgba(0,0,0,0.1); }
-.cp-stat:focus-visible { box-shadow: 0 0 0 3px rgba(255,158,27,0.24); }
-
 /* ── Pill ── */
 .cp-pill {
   display: inline-flex;
@@ -119,41 +83,6 @@ const GLOBAL_CSS = `
   letter-spacing: 0.01em;
   border: 1px solid transparent;
   white-space: nowrap;
-}
-
-/* ── Tab ── */
-.cp-tab {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border-radius: 9px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  background: transparent;
-  transition: all 0.16s ease;
-  white-space: nowrap;
-  font-family: inherit;
-  color: ${tk.ink3};
-  outline: none;
-}
-.cp-tab:focus-visible { box-shadow: 0 0 0 2px ${tk.accent}; }
-.cp-tab:not(.active):hover { color: ${tk.ink2}; background: rgba(0,0,0,0.04); }
-.cp-tab.active {
-  background: ${tk.surface};
-  color: ${tk.ink};
-  font-weight: 600;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.09), 0 0 0 1px rgba(0,0,0,0.05);
-}
-.cp-tab-badge {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 99px;
-  transition: all 0.16s ease;
 }
 
 /* ── Buttons ── */
@@ -219,10 +148,10 @@ const GLOBAL_CSS = `
 
 /* ── Modal ── */
 .cp-overlay {
-  position: fixed; inset: 0; z-index: 50;
+  position: fixed; inset: 0; z-index: 1000;
   display: flex; align-items: center; justify-content: center; padding: 20px;
-  background: rgba(10,10,11,0.52);
-  backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
+  background: rgba(15,23,42,0.20);
+  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
   animation: cp-fade-in 0.18s ease;
 }
 .cp-modal {
@@ -278,18 +207,11 @@ const GLOBAL_CSS = `
   font-weight: 700; flex-shrink: 0; letter-spacing: -0.02em;
 }
 
-/* ── Date block ── */
-.cp-date-block {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  width: 70px; flex-shrink: 0; padding: 16px 6px;
-  border-right: 1px solid ${tk.border};
-}
-
 /* ── Note quote ── */
 .cp-note-quote {
   position: relative; padding: 12px 14px 12px 18px; border-radius: 10px;
-  background: linear-gradient(135deg, rgba(219,228,223,0.9), rgba(244,240,232,0.96));
-  border: 1px solid rgba(12,59,56,0.12);
+  background: linear-gradient(135deg, ${tk.accentLight}, ${tk.surfaceRaised});
+  border: 1px solid rgba(12,59,56,0.14);
   font-size: 13px; font-style: italic; color: ${tk.ink3}; line-height: 1.65;
 }
 .cp-note-quote::before {
@@ -391,32 +313,6 @@ const GLOBAL_CSS = `
   border: 1px solid ${tk.border}; background: ${tk.surface}; color: ${tk.ink3};
   transition: all 0.16s ease; white-space: nowrap; outline: none;
 }
-.cp-action:hover { background: ${tk.surfaceRaised}; border-color: ${tk.borderStrong}; color: ${tk.ink2}; }
-.cp-action:active { transform: scale(0.97); }
-.cp-action.prim {
-  background: ${tk.accent}; color: white; border-color: transparent;
-  box-shadow: 0 2px 8px rgba(255,158,27,0.22);
-}
-.cp-action.prim:hover { background: ${tk.amberText}; box-shadow: 0 4px 14px rgba(224,124,0,0.28); transform: translateY(-1px); }
-.cp-action.dngr { background: ${tk.redLight}; color: ${tk.redText}; border-color: rgba(185,67,62,0.16); }
-.cp-action.dngr:hover { background: rgba(185,67,62,0.16); border-color: rgba(185,67,62,0.28); }
-
-/* ── Contact link ── */
-.cp-link {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: 12px; font-weight: 500; color: ${tk.accentText};
-  text-decoration: none; transition: color 0.14s;
-}
-.cp-link:hover { color: ${tk.accent}; text-decoration: underline; }
-
-/* ── Empty ── */
-.cp-empty {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 80px 24px; text-align: center;
-  background: ${tk.surface}; border-radius: 16px;
-  border: 1px dashed ${tk.borderStrong};
-}
-
 /* ── Done check ── */
 .cp-done-ico {
   width: 64px; height: 64px; border-radius: 50%; background: ${tk.greenLight};
@@ -424,17 +320,6 @@ const GLOBAL_CSS = `
   margin: 0 auto 18px;
   animation: cp-bounce-in 0.45s cubic-bezier(0.34,1.56,0.64,1);
 }
-
-/* ── Search ── */
-.cp-search { position: relative; }
-.cp-search input { padding-left: 36px; padding-right: 32px; }
-.cp-search-ico { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); pointer-events: none; color: ${tk.ink4}; }
-.cp-search-clr {
-  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-  color: ${tk.ink4}; background: none; border: none; cursor: pointer; padding: 2px;
-  display: flex; transition: color 0.13s; outline: none;
-}
-.cp-search-clr:hover { color: ${tk.ink2}; }
 
 /* ── Reduced motion ── */
 @media (prefers-reduced-motion: reduce) {
@@ -553,7 +438,7 @@ const avt = (id: string) => {
   return AVT[Math.abs(h) % AVT.length];
 };
 
-const DISPLAY_TZ = "Europe/Paris";
+/* Shared with the activity page so a record never lands on two different days. */
 const fmtFull = (s: string) => new Date(s).toLocaleDateString("fr-FR", {
   weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: DISPLAY_TZ,
 });
@@ -576,11 +461,16 @@ const S: Record<RdvStatus, {
   label: string; dot: string;
   pill: { color: string; bg: string; border: string };
   stripe: string;
+  chip: string; rail: string; dotCls: string;
 }> = {
-  upcoming:   { label:"À venir",  dot:tk.green,  pill:{color:tk.greenText, bg:tk.greenLight, border:"#BBF7D0"}, stripe:tk.green  },
-  past:       { label:"Passé",    dot:tk.ink4,   pill:{color:tk.ink3,      bg:tk.surfaceRaised, border:"rgba(21,32,30,0.13)"}, stripe:"#b8c2bd" },
-  rescheduled:{ label:"Reporté",  dot:tk.amber,  pill:{color:tk.amberText, bg:tk.amberLight, border:"#FDE68A"}, stripe:tk.amber  },
-  cancelled:  { label:"Annulé",   dot:tk.red,    pill:{color:tk.redText,   bg:tk.redLight,   border:"#FECACA"}, stripe:tk.red    },
+  upcoming:   { label:"À venir",  dot:tk.green,  pill:{color:tk.greenText, bg:tk.greenLight, border:"#BBF7D0"}, stripe:tk.green,
+                chip:"border-emerald-200 bg-emerald-50 text-emerald-700", rail:"bg-emerald-500", dotCls:"bg-emerald-500" },
+  past:       { label:"Passé",    dot:tk.ink4,   pill:{color:tk.ink3,      bg:tk.surfaceRaised, border:"rgba(21,32,30,0.13)"}, stripe:"#b8c2bd",
+                chip:"border-slate-200 bg-slate-100 text-slate-600", rail:"bg-slate-300", dotCls:"bg-slate-400" },
+  rescheduled:{ label:"Reporté",  dot:tk.amber,  pill:{color:tk.amberText, bg:tk.amberLight, border:"#FDE68A"}, stripe:tk.amber,
+                chip:"border-amber-200 bg-amber-50 text-amber-700", rail:"bg-amber-500", dotCls:"bg-amber-500" },
+  cancelled:  { label:"Annulé",   dot:tk.red,    pill:{color:tk.redText,   bg:tk.redLight,   border:"#FECACA"}, stripe:tk.red,
+                chip:"border-rose-200 bg-rose-50 text-rose-700", rail:"bg-rose-400", dotCls:"bg-rose-500" },
 };
 
 const OM: Record<string, { label:string; color:string; bg:string; iconBg:string }> = {
@@ -612,6 +502,34 @@ const CHANNEL_LABELS: Record<string, string> = {
 const getChannelLabel = (channel?: string | null) => {
   if (!channel) return null;
   return CHANNEL_LABELS[channel] ?? channel;
+};
+
+/* Board columns. A meeting's column is derived from getRdvStatus(), so cards move
+   between columns on their own as dates pass or an outcome is recorded. */
+const BOARD_COLUMNS: { key: RdvStatus; label: string; empty: string }[] = [
+  { key:"upcoming",    label:"À venir",  empty:"Aucun rendez-vous à venir" },
+  { key:"past",        label:"Passés",   empty:"Aucun rendez-vous passé" },
+  { key:"rescheduled", label:"Reportés", empty:"Aucun report en cours" },
+  { key:"cancelled",   label:"Annulés",  empty:"Aucune annulation" },
+];
+
+const EMPTY_COPY: Record<TabId, { title: string; hint: string }> = {
+  all:         { title:"Aucun rendez-vous pour le moment", hint:"Dès que nos commerciaux décrochent un rendez-vous pour vous, il apparaît ici." },
+  upcoming:    { title:"Aucun rendez-vous à venir",        hint:"Vos prochains rendez-vous apparaîtront ici dès qu'ils seront décrochés." },
+  past:        { title:"Aucun rendez-vous passé",          hint:"Une fois vos rendez-vous réalisés, vous pourrez donner votre avis ici." },
+  rescheduled: { title:"Aucun report en cours",            hint:"Les rendez-vous en attente d'une nouvelle date apparaîtront ici." },
+  cancelled:   { title:"Aucun rendez-vous annulé",         hint:"Bonne nouvelle : aucun de vos rendez-vous n'a été annulé." },
+};
+
+/* Tells the client, in plain language, what happens next for this meeting. */
+const getNextStep = (m: Meeting, st: RdvStatus, hasFeedback: boolean) => {
+  if (st === "cancelled" || hasFeedback) return null;
+  if (st === "upcoming") {
+    return m.callbackDate
+      ? { Icon: Calendar, text: "Ajoutez ce rendez-vous à votre agenda pour ne pas l'oublier.", bg: tk.accentLight, color: tk.accentText }
+      : { Icon: Clock, text: "Notre équipe confirme la date avec le prospect. Rien à faire de votre côté.", bg: tk.surfaceRaised, color: tk.ink3 };
+  }
+  return { Icon: MessageSquare, text: "Ce rendez-vous a eu lieu — dites-nous comment il s'est passé.", bg: tk.accentLight, color: tk.accentText };
 };
 
 /* ═══════════════════════════════════════════════════════════════
@@ -720,8 +638,12 @@ function Modal({ children, onClose, title, subtitle, wide, footer }: {
     return ()=>{ document.removeEventListener("keydown",h); document.body.style.overflow=""; };
   },[onClose]);
 
-  return (
-    <div className="cp-overlay" role="dialog" aria-modal="true" aria-label={title}
+  if (typeof document === "undefined") return null;
+
+  // Portalled to body: client-portal wrappers retain a CSS transform, which would
+  // otherwise become the containing block and trap this fixed overlay in the page.
+  return createPortal(
+    <div className="cp-page cp-overlay" role="dialog" aria-modal="true" aria-label={title}
       onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
       <div className="cp-modal" style={{maxWidth:wide?760:520}}>
         <div className="cp-modal-header">
@@ -736,7 +658,8 @@ function Modal({ children, onClose, title, subtitle, wide, footer }: {
         <div className="cp-modal-body">{children}</div>
         {footer && <div className="cp-modal-footer">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -980,80 +903,80 @@ export default function ClientPortalMeetingsPage() {
   if (!clientId||loading) return <MeetingsSkeleton />;
 
   const STAT_CFG=[
-    {key:"upcoming"   as const, label:"À venir",  stripe:tk.green  },
-    {key:"past"       as const, label:"Passés",   stripe:"#CBD5E1" },
-    {key:"rescheduled"as const, label:"Reportés", stripe:tk.amber  },
-    {key:"cancelled"  as const, label:"Annulés",  stripe:tk.red    },
-  ];
-
-  const TABS: {id:TabId; label:string}[] = [
-    {id:"all",label:"Tous"},{id:"upcoming",label:"À venir"},
-    {id:"past",label:"Passés"},{id:"rescheduled",label:"Reportés"},
-    {id:"cancelled",label:"Annulés"},
+    {key:"all"        as const, label:"Tous",     hint:"Historique complet",     chip:"border-slate-300 bg-slate-900 text-white"     },
+    {key:"upcoming"   as const, label:"À venir",  hint:"Rendez-vous à préparer", chip:"border-emerald-200 bg-emerald-50 text-emerald-700" },
+    {key:"past"       as const, label:"Passés",   hint:"Votre avis attendu",     chip:"border-slate-200 bg-slate-100 text-slate-700" },
+    {key:"rescheduled"as const, label:"Reportés", hint:"Nouvelle date en cours", chip:"border-amber-200 bg-amber-50 text-amber-700"  },
+    {key:"cancelled"  as const, label:"Annulés",  hint:"Ne se tiendront pas",    chip:"border-rose-200 bg-rose-50 text-rose-700"     },
   ];
 
   return (
-    <div className="cp-page" style={{minHeight:"100%",background:tk.bg,padding:"28px 28px 56px"}}>
+    <div className="cp-page w-full min-w-0 max-w-[1600px] mx-auto space-y-5 pb-8">
       <style dangerouslySetInnerHTML={{__html:GLOBAL_CSS}} />
 
       {/* ── Header ─────────────────────────────────────────── */}
-      <header className="cp-enter" style={{display:"flex",flexWrap:"wrap",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:32}}>
-        <div>
-          <h1 style={{fontFamily:"'DM Sans','Inter',system-ui,sans-serif",fontSize:32,fontWeight:600,color:tk.ink,letterSpacing:"-0.03em",margin:0,lineHeight:1.15}}>
-            Mes rendez-vous
-          </h1>
-          <p style={{fontSize:13.5,color:tk.ink3,marginTop:6,lineHeight:1.5}}>
-            Consultez vos rendez-vous, donnez votre avis, demandez un report.
-          </p>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div className="cp-search" style={{width:260}}>
-            <Search className="cp-search-ico" style={{width:15,height:15}} />
-            <input className="cp-input" type="search" placeholder="Contact, entreprise…" value={q} onChange={e=>setQ(e.target.value)} aria-label="Rechercher" />
-            {q && <button className="cp-search-clr" onClick={()=>setQ("")} aria-label="Effacer"><X style={{width:13,height:13}} /></button>}
+      <header className="flex flex-col gap-4 border-b-2 border-slate-200 pb-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-800 bg-[#0B0F19] text-[#2890F8] shadow-md shadow-black/15">
+            <Calendar className="h-5 w-5" />
           </div>
-          <button className="cp-btn cp-btn-secondary" style={{gap:7,padding:"0 14px"}} onClick={()=>genCSV(filtered)}>
-            <FileSpreadsheet style={{width:15,height:15}} />Exporter{filtered.length ? ` (${filtered.length} RDV)` : ""}
+          <div>
+            <h1 className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl">Mes rendez-vous</h1>
+            <p className="mt-0.5 text-xs font-medium text-slate-600">Tous les rendez-vous décrochés par nos équipes pour vous.</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <input type="search" value={q} onChange={e=>setQ(e.target.value)} aria-label="Rechercher"
+              placeholder="Contact, entreprise…"
+              className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-8 text-xs font-medium text-slate-900 transition-all placeholder:text-slate-400 focus:border-[#2890F8] focus:outline-none focus:ring-2 focus:ring-[#2890F8]/20 sm:w-[240px]" />
+            {q && (
+              <button onClick={()=>setQ("")} aria-label="Effacer la recherche"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-700">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <button onClick={()=>genCSV(filtered)} disabled={!filtered.length}
+            className="flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 shadow-2xs transition-all hover:bg-slate-50 disabled:opacity-60">
+            <FileSpreadsheet className="h-4 w-4" />Exporter{filtered.length ? ` (${filtered.length})` : ""}
           </button>
         </div>
       </header>
 
-      {/* ── Stats ──────────────────────────────────────────── */}
-      <div className="cp-enter" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24,animationDelay:"0.05s"}}>
-        {STAT_CFG.map(({key,label,stripe})=>{
-          const active=tab===key;
-          return (
-            <button key={key} type="button" onClick={()=>setTab(key)} aria-pressed={active}
-              className="cp-stat"
-              style={{
-                border:`1px solid ${active?stripe+"30":tk.border}`,
-                background: active?`linear-gradient(135deg,${stripe}08,${stripe}04)`:tk.surface,
-                boxShadow: active?`0 4px 20px -6px ${stripe}35`:"none",
-              }}>
-              <div style={{width:3,height:38,borderRadius:2,background:stripe,opacity:active?1:0.3,flexShrink:0,transition:"opacity 0.2s ease"}} />
-              <div>
-                <div style={{fontSize:30,fontWeight:800,color:active?stripe:tk.ink,lineHeight:1,fontVariantNumeric:"tabular-nums",letterSpacing:"-0.04em",animation:"cp-count-in 0.4s ease"}}>
-                  {stats[key]}
-                </div>
-                <div style={{fontSize:11.5,color:tk.ink3,marginTop:3,fontWeight:500}}>{label}</div>
-              </div>
-            </button>
-          );
-        })}
+      {/* ── How it works ───────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+        {[
+          "Nos commerciaux décrochent les rendez-vous pour vous.",
+          "Vous les retrouvez ici, avec la fiche complète du prospect.",
+          "Après chaque rendez-vous, votre avis affine notre ciblage.",
+        ].map((step,i)=>(
+          <div key={i} className="flex items-center gap-2 text-[11.5px] font-medium text-slate-700">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#2890F8] text-[10px] font-black text-white">
+              {i+1}
+            </span>
+            {step}
+          </div>
+        ))}
       </div>
 
-      {/* ── Tabs ───────────────────────────────────────────── */}
-      <div className="cp-enter" style={{display:"flex",gap:2,padding:4,background:"rgba(0,0,0,0.04)",borderRadius:14,width:"fit-content",marginBottom:24,animationDelay:"0.09s"}}
-        role="tablist" aria-label="Filtrer les rendez-vous">
-        {TABS.map(t=>{
-          const active=tab===t.id;
-          const count=t.id==="all"?tabCounts.all:tabCounts[t.id as RdvStatus]??0;
+      {/* ── Filters ────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtrer les rendez-vous">
+        {STAT_CFG.map(({key,label,hint,chip})=>{
+          const active=tab===key;
           return (
-            <button key={t.id} role="tab" aria-selected={active} type="button" onClick={()=>setTab(t.id)}
-              className={cn("cp-tab",active&&"active")}>
-              {t.label}
-              <span className="cp-tab-badge" style={{background:active?tk.accentLight:"rgba(0,0,0,0.08)",color:active?tk.accentText:tk.ink4}}>
-                {count}
+            <button key={key} type="button" onClick={()=>setTab(key)} aria-pressed={active} title={hint}
+              className={cn(
+                "flex items-center gap-1.5 rounded-xl border py-1.5 pl-2.5 pr-2 text-[11px] font-bold transition-all duration-150",
+                active ? cn(chip,"shadow-sm") : "border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50"
+              )}>
+              {label}
+              <span className={cn(
+                "ml-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-black tabular-nums",
+                active ? "bg-white/70 shadow-2xs" : "bg-slate-100 text-slate-500"
+              )}>
+                {tabCounts[key]}
               </span>
             </button>
           );
@@ -1062,34 +985,67 @@ export default function ClientPortalMeetingsPage() {
 
       {/* ── List ───────────────────────────────────────────── */}
       {filtered.length===0 ? (
-        <div className="cp-empty cp-enter-fade" style={{animationDelay:"0.1s"}}>
-          <Calendar style={{width:40,height:40,color:tk.ink4,marginBottom:12}} />
-          <p style={{fontSize:15,fontWeight:600,color:tk.ink2,margin:0}}>
-            {q?"Aucun résultat pour cette recherche":"Aucun rendez-vous dans cette catégorie"}
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
+            <Calendar className="h-6 w-6 text-slate-400" />
+          </div>
+          <p className="text-sm font-bold text-slate-700">
+            {q ? "Aucun résultat pour cette recherche" : EMPTY_COPY[tab].title}
           </p>
-          <p style={{fontSize:13,color:tk.ink4,marginTop:6}}>
-            {tab==="upcoming"?"Vos prochains rendez-vous apparaîtront ici.":"Essayez un autre filtre."}
+          <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-slate-500">
+            {q ? "Vérifiez l'orthographe, ou effacez la recherche pour voir tous vos rendez-vous." : EMPTY_COPY[tab].hint}
           </p>
+          {q && (
+            <button onClick={()=>setQ("")}
+              className="mt-4 flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 shadow-2xs transition-all hover:bg-slate-50">
+              Effacer la recherche
+            </button>
+          )}
         </div>
       ) : (
-        <ul style={{display:"flex",flexDirection:"column",gap:10,listStyle:"none",margin:0,padding:0}}>
-          {filtered.map((meeting,idx)=>(
-            <Card key={meeting.id} m={meeting} idx={idx}
-              openSignalCard={openSignalCard}
-              sigOpen={openSignalCard?.id===meeting.id && openSignalCard?.stage==="form"}
-              sigType={sigType}
-              sigRec={sigRec} sigNote={sigNote} sigSub={sigSub}
-              onDetail={()=>openModal(meeting,"detail")}
-              onFeedback={()=>openModal(meeting,"feedback")}
-              onCloseSignal={closeSignal}
-              onReschedule={()=>{ openModal(meeting,"reschedule"); setOpenSignalCard(null); }}
-              onOpenSignalMenu={()=>setOpenSignalCard({ id: meeting.id, stage: "menu" })}
-              onOpenSignalForm={()=>{ setOpenSignalCard({ id: meeting.id, stage: "form" }); setSigType("NO_SHOW"); }}
-              onSigType={setSigType} onSigRec={setSigRec} onSigNote={setSigNote}
-              onSigSubmit={()=>submitSignal(meeting.id)}
-            />
-          ))}
-        </ul>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {BOARD_COLUMNS.filter(col => tab==="all" || tab===col.key).map((col)=>{
+            const items = filtered.filter(m => getRdvStatus(m)===col.key);
+            return (
+              <section key={col.key}
+                className="flex min-h-[180px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-100/70">
+                <header className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white/80 px-3 py-2.5">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className={cn("h-2 w-2 shrink-0 rounded-full", S[col.key].dotCls)} aria-hidden="true" />
+                    <h2 className="truncate text-xs font-black uppercase tracking-wide text-slate-700">{col.label}</h2>
+                  </div>
+                  <span className="shrink-0 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-black tabular-nums text-slate-600">
+                    {items.length}
+                  </span>
+                </header>
+
+                <ul className="m-0 flex list-none flex-col gap-2 p-2">
+                  {items.map((meeting,idx)=>(
+                    <Card key={meeting.id} m={meeting} idx={idx}
+                      openSignalCard={openSignalCard}
+                      sigOpen={openSignalCard?.id===meeting.id && openSignalCard?.stage==="form"}
+                      sigType={sigType}
+                      sigRec={sigRec} sigNote={sigNote} sigSub={sigSub}
+                      onDetail={()=>openModal(meeting,"detail")}
+                      onFeedback={()=>openModal(meeting,"feedback")}
+                      onCloseSignal={closeSignal}
+                      onReschedule={()=>{ openModal(meeting,"reschedule"); setOpenSignalCard(null); }}
+                      onOpenSignalMenu={()=>setOpenSignalCard({ id: meeting.id, stage: "menu" })}
+                      onOpenSignalForm={()=>{ setOpenSignalCard({ id: meeting.id, stage: "form" }); setSigType("NO_SHOW"); }}
+                      onSigType={setSigType} onSigRec={setSigRec} onSigNote={setSigNote}
+                      onSigSubmit={()=>submitSignal(meeting.id)}
+                    />
+                  ))}
+                  {items.length===0 && (
+                    <li className="rounded-xl border border-dashed border-slate-300 px-3 py-6 text-center text-[11px] font-medium text-slate-400">
+                      {col.empty}
+                    </li>
+                  )}
+                </ul>
+              </section>
+            );
+          })}
+        </div>
       )}
 
       {/* ── Modals ─────────────────────────────────────────── */}
@@ -1160,146 +1116,137 @@ function Card({
   const fb     = m.meetingFeedback;
   const up     = st==="upcoming";
   const dt     = m.callbackDate ? fmtCard(m.callbackDate) : null;
+  const ns     = getNextStep(m, st, !!fb);
   const sigDis = sigSub||(sigType==="NO_SHOW"&&!sigRec);
+  const name    = m.contact ? [m.contact.firstName, m.contact.lastName].filter(Boolean).join(" ") || "Contact" : m.company?.name ?? "Contact entreprise";
+  const company = m.contact?.company?.name ?? m.company?.name ?? "Entreprise inconnue";
+  const phones  = [m.contact?.phone, m.contact?.company?.phone, m.company?.phone]
+    .filter((p): p is string => !!p && p.trim() !== "")
+    .filter((p, i, arr) => arr.indexOf(p) === i);
   const sigMenuOpen = openSignalCard?.id===m.id && openSignalCard?.stage==="menu";
 
   return (
-    <li className={cn("cp-card cp-enter", up&&"cp-card-upcoming")}
+    <li className={cn(
+        "cp-enter group relative overflow-hidden rounded-xl border bg-white shadow-xs transition-all",
+        st==="cancelled" ? "border-slate-200 opacity-80" : "border-slate-200 hover:border-slate-400 hover:shadow-md"
+      )}
       data-signaler-card={m.id}
-      style={{animationDelay:`${idx*0.04}s`,opacity:st==="cancelled"?0.72:1}}>
-      {/* Status stripe top */}
-      <div className="cp-card-stripe" style={{height:3,background:sm.stripe,width:"100%",animation:"cp-stripe-in 0.4s ease"}} aria-hidden="true" />
+      style={{animationDelay:`${idx*0.03}s`}}>
 
-      <div style={{display:"flex"}}>
-        {/* Date column */}
-        <div className="cp-date-block">
+      <span className={cn("absolute inset-y-0 left-0 w-1", sm.rail)} aria-hidden="true" />
+
+      <div className="py-2.5 pl-3.5 pr-2.5">
+        {/* Date + report */}
+        <div className="flex items-start justify-between gap-2">
           {dt ? (
-            <>
-              <span style={{fontSize:30,fontWeight:800,color:tk.ink,lineHeight:1,fontVariantNumeric:"tabular-nums",letterSpacing:"-0.04em"}}>
-                {dt.day}
-              </span>
-              <span style={{fontSize:10,fontWeight:700,color:tk.ink4,letterSpacing:"0.1em",marginTop:3}}>
-                {dt.month}
-              </span>
-              <div style={{marginTop:10,fontSize:11.5,fontWeight:700,color:tk.accentText,background:tk.accentLight,padding:"3px 7px",borderRadius:99,whiteSpace:"nowrap"}}>
-                {dt.time}
-              </div>
-            </>
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-2 py-0.5 text-[10px] font-bold tabular-nums text-white">
+              <CalendarClock className="h-3 w-3" aria-hidden="true" />
+              {dt.day} {dt.month} · {dt.time}
+            </span>
           ) : (
-            <span style={{fontSize:10,fontWeight:700,color:tk.ink4,letterSpacing:"0.08em",textAlign:"center",lineHeight:1.4}}>
-              Date à confirmer
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-slate-300 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-500">
+              <Clock className="h-3 w-3" aria-hidden="true" />Date à définir
+            </span>
+          )}
+          <button type="button" onClick={(e)=>{ e.stopPropagation(); onOpenSignalMenu(); }} aria-expanded={sigMenuOpen}
+            title="Signaler un problème" aria-label="Signaler un problème"
+            className="-mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-300 transition-all hover:bg-rose-50 hover:text-rose-600">
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
+
+        {/* Contact */}
+        <div className="mt-2 flex items-center gap-2">
+          <Avt m={m} size={28} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-bold text-slate-900">{name}</p>
+            <p className="flex min-w-0 items-center gap-1 text-[10.5px] font-medium text-slate-500">
+              <Building2 className="h-2.5 w-2.5 shrink-0 text-slate-400" aria-hidden="true" />
+              <span className="truncate">{company}</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Tags */}
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          <span className="truncate rounded-md border border-blue-100 bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-[#1a75ce]">
+            {m.campaign.mission.name}
+          </span>
+          {m.meetingType && (
+            <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+              {MTY[m.meetingType].emoji} {MTY[m.meetingType].label}
+            </span>
+          )}
+          {fb && (
+            <span className="rounded-md px-1.5 py-0.5 text-[10px] font-bold"
+              style={{background:OM[fb.outcome]?.bg??tk.surfaceRaised,color:OM[fb.outcome]?.color??tk.ink3}}>
+              {OM[fb.outcome]?.label??fb.outcome}
             </span>
           )}
         </div>
 
-        {/* Content */}
-        <div style={{flex:1,padding:"14px 16px",display:"flex",flexDirection:"column",gap:9,minWidth:0}}>
-          {/* Badges */}
-          <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:5}}>
-            <Pill label={sm.label} color={sm.pill.color} bg={sm.pill.bg} border={sm.pill.border} dot={sm.dot} />
-            {getChannelLabel(m.channel) && (
-              <Pill label={`Canal: ${getChannelLabel(m.channel)}`} color={tk.ink3} bg={tk.surfaceRaised} border={tk.border} />
+        {/* Contact links */}
+        {(m.contact?.email || phones[0]) && (
+          <div className="mt-1.5 flex flex-col gap-0.5">
+            {m.contact?.email && (
+              <a href={`mailto:${m.contact.email}`} onClick={e=>e.stopPropagation()}
+                className="inline-flex min-w-0 items-center gap-1 text-[10.5px] font-medium text-[#1a75ce] hover:underline">
+                <Mail className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
+                <span className="truncate">{m.contact.email}</span>
+              </a>
             )}
-            {m.meetingType && (
-              <Pill label={`${MTY[m.meetingType].emoji} ${MTY[m.meetingType].label}`} color={tk.ink3} bg={tk.surfaceRaised} border={tk.border} />
+            {phones[0] && (
+              <a href={`tel:${phones[0]}`} onClick={e=>e.stopPropagation()}
+                className="inline-flex items-center gap-1 text-[10.5px] font-medium text-[#1a75ce] hover:underline">
+                <Phone className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />{phones[0]}
+              </a>
             )}
-            <Pill label={m.campaign.mission.name} color={tk.accentText} bg={tk.accentLight} border="rgba(12,59,56,0.18)" />
-            {m.interlocuteur && (
-              <Pill
-                label={`Commercial: ${[m.interlocuteur.firstName, m.interlocuteur.lastName].filter(Boolean).join(" ") || "Assigné"}`}
-                color="#065F46"
-                bg="#ECFDF5"
-                border="#A7F3D0"
-              />
-            )}
-            {m.rdvFiche && (
-              <Pill label="Fiche RDV" color={tk.ink3} bg={tk.surfaceRaised} border={tk.border} />
-            )}
-            <span style={{fontSize:11.5,color:tk.ink4}}>{m.campaign.name}</span>
           </div>
+        )}
 
-          {/* Contact */}
-          <div style={{display:"flex",alignItems:"flex-start",gap:11}}>
-            <Avt m={m} />
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{display:"flex",flexWrap:"wrap",alignItems:"baseline",gap:"2px 7px"}}>
-                <span style={{fontSize:14.5,fontWeight:700,color:tk.ink}}>
-                  {m.contact ? [m.contact.firstName, m.contact.lastName].filter(Boolean).join(" ") || "Contact" : m.company?.name ?? "Contact entreprise"}
-                </span>
-                {m.contact?.title && <span style={{fontSize:12,color:tk.ink3}}>{m.contact.title}</span>}
-              </div>
-              <div style={{fontSize:12.5,fontWeight:600,color:tk.ink2,marginTop:2,display:"flex",alignItems:"center",gap:5}}>
-                <Building2 style={{width:12,height:12,color:tk.ink4,flexShrink:0}} aria-hidden="true" />
-                {m.contact?.company?.name ?? m.company?.name ?? "Entreprise inconnue"}
-                {m.contact?.company?.industry && <span style={{fontWeight:400,color:tk.ink3}}>· {m.contact.company.industry}</span>}
-              </div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:"3px 12px",marginTop:6}}>
-                {m.contact?.email   && <a href={`mailto:${m.contact.email}`}  className="cp-link" onClick={e=>e.stopPropagation()}><Mail   style={{width:11,height:11}} />{m.contact.email}</a>}
-                {[m.contact?.phone, m.contact?.company?.phone, m.company?.phone]
-                  .filter((p): p is string => !!p && p.trim() !== "")
-                  .filter((p, i, arr) => arr.indexOf(p) === i)
-                  .map((phone) => (
-                    <a key={phone} href={`tel:${phone}`} className="cp-link" onClick={e=>e.stopPropagation()}><Phone style={{width:11,height:11}} />{phone}</a>
-                  ))}
-                {m.contact?.linkedin&& <a href={m.contact.linkedin} target="_blank" rel="noopener noreferrer" className="cp-link" onClick={e=>e.stopPropagation()}><Linkedin style={{width:11,height:11}} />LinkedIn</a>}
-              </div>
-              {/* Format action links on card: Rejoindre / Itinéraire / Appeler */}
-              <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:8}}>
-                {m.meetingType==="VISIO" && m.meetingJoinUrl && (
-                  <a href={m.meetingJoinUrl} target="_blank" rel="noopener noreferrer" className="cp-btn cp-btn-primary" style={{display:"inline-flex",textDecoration:"none",fontSize:12,padding:"6px 12px"}} onClick={e=>e.stopPropagation()}>
-                    <Video style={{width:12,height:12}} /> Rejoindre
-                  </a>
-                )}
-                {m.meetingType==="PHYSIQUE" && m.meetingAddress && (
-                  <a href={`https://maps.google.com/?q=${encodeURIComponent(m.meetingAddress)}`} target="_blank" rel="noopener noreferrer" className="cp-btn cp-btn-secondary" style={{display:"inline-flex",textDecoration:"none",fontSize:12,padding:"6px 12px"}} onClick={e=>e.stopPropagation()}>
-                    <MapPin style={{width:12,height:12}} /> Itinéraire
-                  </a>
-                )}
-                {m.meetingType==="TELEPHONIQUE" && (m.meetingPhone || m.contact?.phone || m.contact?.company?.phone || m.company?.phone) && (
-                  <a href={`tel:${m.meetingPhone || m.contact?.phone || m.contact?.company?.phone || m.company?.phone}`} className="cp-btn cp-btn-secondary" style={{display:"inline-flex",textDecoration:"none",fontSize:12,padding:"6px 12px"}} onClick={e=>e.stopPropagation()}>
-                    <Phone style={{width:12,height:12}} /> Appeler
-                  </a>
-                )}
-              </div>
-            </div>
+        {m.note && (
+          <p className="mt-1.5 line-clamp-2 border-l-2 border-slate-200 pl-2 text-[10.5px] italic leading-snug text-slate-500"
+            title={m.note}>
+            &ldquo;{m.note}&rdquo;
+          </p>
+        )}
+
+        {ns && (
+          <div className="mt-2 flex items-start gap-1.5 rounded-md px-2 py-1 text-[10.5px] font-medium leading-snug"
+            style={{background:ns.bg,color:ns.color}}>
+            <ns.Icon className="mt-px h-3 w-3 shrink-0" aria-hidden="true" />
+            <span>{ns.text}</span>
           </div>
-
-          {/* SDR note */}
-          {m.note && (
-            <div className="cp-note-quote">
-              <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.1em",color:tk.ink4,fontStyle:"normal",marginBottom:4}}>
-                Note{m.sdr?.name?` · ${m.sdr.name}`:""}
-              </div>
-              &ldquo;{m.note}&rdquo;
-            </div>
-          )}
-
-          {/* Feedback badge */}
-          {fb && (
-            <div style={{display:"flex",alignItems:"center",gap:7}}>
-              <span style={{fontSize:11.5,color:tk.ink4}}>Votre avis :</span>
-              <Pill label={OM[fb.outcome]?.label??fb.outcome} color={OM[fb.outcome]?.color??tk.ink3} bg={OM[fb.outcome]?.bg??tk.surfaceRaised} />
-            </div>
-          )}
-        </div>
+        )}
 
         {/* Actions */}
-        <div style={{width:160,flexShrink:0,display:"flex",flexDirection:"column",justifyContent:"center",gap:6,padding:"14px 12px",borderLeft:`1px solid ${tk.border}`}}>
-          <button type="button" className="cp-action" onClick={onDetail}>
-            <Eye style={{width:12,height:12}} />Voir la fiche
-          </button>
-          {!up && !fb && (
-            <button type="button" className="cp-action prim" onClick={onFeedback}>
-              <MessageSquare style={{width:12,height:12}} />Mon avis
+        <div className="mt-2 flex items-center gap-1.5">
+          {up && m.meetingType==="VISIO" && m.meetingJoinUrl ? (
+            <a href={m.meetingJoinUrl} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}
+              className="inline-flex h-7 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#2890F8] px-2 text-[10.5px] font-bold text-white shadow-2xs transition-all hover:bg-[#1a75ce]">
+              <Video className="h-3 w-3" aria-hidden="true" />Rejoindre
+            </a>
+          ) : up && m.callbackDate ? (
+            <button type="button" onClick={()=>genICS(m)}
+              className="inline-flex h-7 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#2890F8] px-2 text-[10.5px] font-bold text-white shadow-2xs transition-all hover:bg-[#1a75ce]">
+              <Download className="h-3 w-3" aria-hidden="true" />Agenda
             </button>
-          )}
-          {!up && fb && (
-            <button type="button" className="cp-action" onClick={onFeedback}>
-              <Edit3 style={{width:12,height:12}} />Modifier l&apos;avis
+          ) : st==="past" && !fb ? (
+            <button type="button" onClick={onFeedback}
+              className="inline-flex h-7 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#2890F8] px-2 text-[10.5px] font-bold text-white shadow-2xs transition-all hover:bg-[#1a75ce]">
+              <MessageSquare className="h-3 w-3" aria-hidden="true" />Mon avis
             </button>
-          )}
-          <button type="button" className="cp-action dngr" onClick={(e)=>{ e.stopPropagation(); onOpenSignalMenu(); }} aria-expanded={sigMenuOpen}>
-            <AlertTriangle style={{width:12,height:12}} />Signaler
+          ) : st==="past" && fb ? (
+            <button type="button" onClick={onFeedback}
+              className="inline-flex h-7 flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2 text-[10.5px] font-bold text-slate-600 transition-all hover:border-blue-400 hover:text-[#2890F8]">
+              <Edit3 className="h-3 w-3" aria-hidden="true" />Modifier l&apos;avis
+            </button>
+          ) : null}
+
+          <button type="button" onClick={onDetail}
+            title={m.rdvFiche ? "Voir la fiche" : "Voir le détail"} aria-label={m.rdvFiche ? "Voir la fiche" : "Voir le détail"}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 transition-all hover:border-blue-400 hover:text-[#2890F8]">
+            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -1323,13 +1270,15 @@ function Card({
                 <X style={{width:12,height:12}} />
               </button>
             </div>
-            <div style={{display:"flex",gap:10}}>
-              <button type="button" className={cn("cp-choice")} onClick={onOpenSignalForm} style={{flex:1}}>
-                <span className="cp-choice-ico"><XCircle style={{width:18,height:18}} /></span>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <button type="button" className={cn("cp-choice")} onClick={onOpenSignalForm}
+                style={{flexDirection:"row",justifyContent:"flex-start",gap:10,padding:"10px 12px"}}>
+                <span className="cp-choice-ico"><XCircle style={{width:16,height:16}} /></span>
                 Contact absent
               </button>
-              <button type="button" className={cn("cp-choice")} onClick={()=>{ onReschedule(); onCloseSignal(); }} style={{flex:1}}>
-                <span className="cp-choice-ico"><CalendarClock style={{width:18,height:18}} /></span>
+              <button type="button" className={cn("cp-choice")} onClick={()=>{ onReschedule(); onCloseSignal(); }}
+                style={{flexDirection:"row",justifyContent:"flex-start",gap:10,padding:"10px 12px"}}>
+                <span className="cp-choice-ico"><CalendarClock style={{width:16,height:16}} /></span>
                 Replanifier avec le prospect
               </button>
             </div>

@@ -10,6 +10,7 @@ import {
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { mistralFetch } from '@/lib/ai/mistral';
+import { safeParseJsonFromModel } from '@/lib/ai/json';
 
 // ============================================
 // SCHEMA
@@ -138,28 +139,6 @@ const analysisResponseSchema = z.object({
     deltaInsights: deltaInsightsSchema,
     trendAlerts: z.array(trendAlertSchema).default([]),
 });
-
-function safeParseJsonFromModel(content: string): any {
-    const trimmed = content.trim();
-    try {
-        return JSON.parse(trimmed);
-    } catch {
-        // Handle fenced markdown: ```json ... ```
-        const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-        if (fenced?.[1]) {
-            return JSON.parse(fenced[1].trim());
-        }
-
-        // Last resort: parse between first "{" and last "}"
-        const firstBrace = trimmed.indexOf('{');
-        const lastBrace = trimmed.lastIndexOf('}');
-        if (firstBrace >= 0 && lastBrace > firstBrace) {
-            const candidate = trimmed.slice(firstBrace, lastBrace + 1);
-            return JSON.parse(candidate);
-        }
-        throw new Error('INVALID_JSON');
-    }
-}
 
 // ============================================
 // DATA INGESTION — pull all context for the period

@@ -1,28 +1,35 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { Suspense, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-    PhoneCall,
-    Search,
-    X,
-    Clock,
+    Activity,
+    Briefcase,
     CalendarDays,
-    ChevronDown,
-    RefreshCw,
+    CheckCircle2,
+    Clock,
+    FileSpreadsheet,
     Mail,
     Phone,
-    Briefcase,
-    CheckCircle2,
-    Activity,
-    Target,
+    PhoneCall,
+    RefreshCw,
+    Search,
     TrendingUp,
-    Sparkles,
+    X,
 } from "lucide-react";
-import { useToast } from "@/components/ui";
+import { Drawer, useToast } from "@/components/ui";
 import { ACTION_RESULT_LABELS } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import {
+    DISPLAY_TZ,
+    displayDayKey,
+    displayDayKeyDaysAgo,
+    displayDayRange,
+} from "@/lib/date";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════
+   TYPES
+═══════════════════════════════════════════════════════════════ */
 interface CallItem {
     id: string;
     createdAt: string;
@@ -41,803 +48,733 @@ interface CallItem {
     } | null;
     campaign: { name: string; mission: { name: string } };
 }
-interface NormalizedCall extends CallItem {
-    contact: NonNullable<CallItem["contact"]> & { company: { name: string } };
-}
+
 interface StatusDef {
     code: string; label: string; color: string | null; sortOrder: number; resultCategoryCode: string | null;
 }
 interface ResultCategoryDef {
     id: string; code: string; label: string; color: string | null; sortOrder: number;
 }
+type ResultMeta = Record<string, { label: string; color: string }>;
 
-function buildResultMeta(
-    statuses: StatusDef[],
-    categories: ResultCategoryDef[]
-): Record<string, { label: string; color: string; bg: string; border: string }> {
+/* Fallback palette, aligned to the app's slate + #2890F8 vocabulary. */
+const RESULT_META_FALLBACK: ResultMeta = {
+    MEETING_BOOKED:     { label: "RDV pris",        color: "#059669" },
+    CALLBACK_REQUESTED: { label: "Rappel demandé",  color: "#d97706" },
+    INTERESTED:         { label: "Intéressé",       color: "#2890F8" },
+    NO_RESPONSE:        { label: "Pas de réponse",  color: "#64748b" },
+    DISQUALIFIED:       { label: "Disqualifié",     color: "#e11d48" },
+};
+const DEFAULT_STATUS_ORDER = Object.keys(RESULT_META_FALLBACK);
+const NEUTRAL = "#64748b";
+
+function buildResultMeta(statuses: StatusDef[], categories: ResultCategoryDef[]): ResultMeta {
     const catByCode = Object.fromEntries(categories.map((c) => [c.code, c]));
-    const meta: Record<string, { label: string; color: string; bg: string; border: string }> = {};
+    const meta: ResultMeta = {};
     for (const s of statuses) {
-        const color = s.color ?? catByCode[s.resultCategoryCode ?? ""]?.color ?? "#64748b";
-        meta[s.code] = { label: s.label, color, bg: `${color}18`, border: `${color}44` };
+        meta[s.code] = {
+            label: s.label,
+            color: s.color ?? catByCode[s.resultCategoryCode ?? ""]?.color ?? NEUTRAL,
+        };
     }
     return meta;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const PERIODS = [
+    { key: "7",  label: "7 j" },
+    { key: "30", label: "30 j" },
+    { key: "60", label: "60 j" },
+    { key: "90", label: "3 mois" },
+];
+
+/* ═══════════════════════════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════════════════════════ */
 function fmtDuration(s: number | null | undefined): string | null {
     if (!s || s <= 0) return null;
     const m = Math.floor(s / 60), sec = s % 60;
     return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
 }
 function fmtTime(iso: string): string {
-    return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: DISPLAY_TZ });
 }
-function dayKey(iso: string): string {
-    const d = new Date(iso);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function fmtDayLabel(dayKey: string): string {
+    const d = new Date(`${dayKey}T12:00:00`);
+    const today = displayDayKey(new Date());
+    const yesterday = displayDayKeyDaysAgo(1);
+    if (dayKey === today) return "Aujourd'hui";
+    if (dayKey === yesterday) return "Hier";
+    return d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 }
 function getInitials(first?: string | null, last?: string | null): string {
-    return `${(first?.[0] ?? "").toUpperCase()}${(last?.[0] ?? "").toUpperCase()}`;
+    const i = `${(first?.[0] ?? "").toUpperCase()}${(last?.[0] ?? "").toUpperCase()}`;
+    return i || "?";
+}
+/** Deterministic hue per contact — replaces the hardcoded gradient map. */
+function avatarHue(seed: string): number {
+    let h = 0;
+    for (let i = 0; i < seed.length; i++) h = seed.charCodeAt(i) + ((h << 5) - h);
+    return Math.abs(h) % 360;
+}
+function contactName(c: CallItem): string {
+    return [c.contact?.firstName, c.contact?.lastName].filter(Boolean).join(" ") || "Contact";
+}
+function companyName(c: CallItem): string {
+    return c.contact?.company?.name ?? c.company?.name ?? "Entreprise inconnue";
 }
 
-const RESULT_META_FALLBACK: Record<string, { label: string; color: string; bg: string; border: string }> = {
-    MEETING_BOOKED: { label: "RDV pris", color: "#059669", bg: "#ecfdf5", border: "#6ee7b7" },
-    CALLBACK_REQUESTED: { label: "Rappel demandé", color: "#d97706", bg: "#fffbeb", border: "#fcd34d" },
-    INTERESTED: { label: "Intéressé", color: "#0c3b38", bg: "#dbe4df", border: "#a8bdb4" },
-    NO_RESPONSE: { label: "Pas de réponse", color: "#5c6e69", bg: "#f4f0e8", border: "#d6ccbc" },
-    DISQUALIFIED: { label: "Disqualifié", color: "#b9433e", bg: "#fae9e6", border: "#e8c5c2" },
-};
-
-const AVATAR_GRADIENTS: Record<string, string> = {
-    A: "from-[#0c3b38] to-[#114b46]",   B: "from-[#114b46] to-[#25745f]",
-    C: "from-[#25745f] to-[#0c3b38]",   D: "from-[#0c3b38] to-[#25745f]",
-    E: "from-[#25745f] to-[#114b46]",   F: "from-[#114b46] to-[#0c3b38]",
-    G: "from-[#0c3b38] to-[#082c2a]",   H: "from-[#e07c00] to-[#ff9e1b]",
-    I: "from-[#ff9e1b] to-[#e07c00]",   J: "from-[#082c2a] to-[#0c3b38]",
-    K: "from-[#114b46] to-[#082c2a]",   L: "from-[#082c2a] to-[#114b46]",
-};
-function avatarGradient(name: string): string {
-    const letter = name.trim().toUpperCase()[0] ?? "A";
-    return AVATAR_GRADIENTS[letter] ?? "from-[#0c3b38] to-[#114b46]";
+function exportCSV(rows: CallItem[], meta: ResultMeta) {
+    const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+    const head = ["Date","Heure","Résultat","Mission","Campagne","Prénom","Nom","Poste","Entreprise","Email","Téléphone","Durée (s)","Note"];
+    const body = rows.map((c) => [
+        displayDayKey(c.createdAt),
+        fmtTime(c.createdAt),
+        meta[c.result]?.label ?? ACTION_RESULT_LABELS[c.result] ?? c.result,
+        c.campaign?.mission?.name ?? "",
+        c.campaign?.name ?? "",
+        c.contact?.firstName ?? "",
+        c.contact?.lastName ?? "",
+        c.contact?.title ?? "",
+        companyName(c),
+        c.contact?.email ?? "",
+        c.contact?.phone ?? "",
+        c.duration != null ? String(c.duration) : "",
+        c.note ?? "",
+    ].map(String).map(esc));
+    const csv = [head.join(","), ...body.map((r) => r.join(","))].join("\n");
+    const a = Object.assign(document.createElement("a"), {
+        href: URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" })),
+        download: `activite-${displayDayKey(new Date())}.csv`,
+    });
+    a.click();
+    URL.revokeObjectURL(a.href);
 }
 
-// ─── Result Badge ─────────────────────────────────────────────────────────────
-function ResultBadge({ result, resultMeta }: {
-    result: string;
-    resultMeta: Record<string, { label: string; color: string; bg: string; border: string }>;
-}) {
-    const meta = resultMeta[result] ?? { label: ACTION_RESULT_LABELS[result] ?? result, color: "#5c6e69", bg: "#f4f0e8", border: "#d6ccbc" };
+/* ═══════════════════════════════════════════════════════════════
+   PRIMITIVES
+═══════════════════════════════════════════════════════════════ */
+function ResultChip({ result, meta, size = "sm" }: { result: string; meta: ResultMeta; size?: "sm" | "xs" }) {
+    const m = meta[result] ?? { label: ACTION_RESULT_LABELS[result] ?? result, color: NEUTRAL };
     return (
         <span
-            style={{ background: meta.bg, borderColor: meta.border, color: meta.color }}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border leading-none whitespace-nowrap"
+            style={{ background: `${m.color}14`, borderColor: `${m.color}55`, color: m.color }}
+            className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg border font-bold leading-none whitespace-nowrap",
+                size === "sm" ? "px-2 py-1 text-[11px]" : "px-1.5 py-0.5 text-[10px]",
+            )}
         >
-            <span style={{ background: meta.color }} className="w-1.5 h-1.5 rounded-full flex-shrink-0" />
-            {meta.label}
+            <span style={{ background: m.color }} className="h-1.5 w-1.5 shrink-0 rounded-full" />
+            {m.label}
         </span>
     );
 }
 
-// ─── Mini stacked bar ─────────────────────────────────────────────────────────
-function MiniBar({ counts, total, statusOrder, resultMeta }: {
-    counts: Record<string, number>; total: number; statusOrder: string[];
-    resultMeta: Record<string, { label: string; color: string; bg: string; border: string }>;
-}) {
-    return (
-        <div className="flex h-2 rounded-full overflow-hidden w-full bg-[var(--elan-paper-3)]">
-            {statusOrder.map((k) => {
-                const pct = total ? ((counts[k] || 0) / total) * 100 : 0;
-                return pct > 0 ? (
-                    <div key={k} style={{ width: `${pct}%`, background: resultMeta[k]?.color ?? "#64748b" }} className="transition-all duration-700" />
-                ) : null;
-            })}
-        </div>
-    );
-}
-
-// ─── Call Card ────────────────────────────────────────────────────────────────
-function CallCard({ call, resultMeta, index }: {
-    call: NormalizedCall;
-    resultMeta: Record<string, { label: string; color: string; bg: string; border: string }>;
-    index: number;
-}) {
-    const [noteOpen, setNoteOpen] = useState(false);
-    const name = [call.contact?.firstName, call.contact?.lastName].filter(Boolean).join(" ") || "—";
-    const co = call.contact?.company?.name ?? "—";
-    const dur = fmtDuration(call.duration ?? null);
-    const meta = resultMeta[call.result] ?? { color: "#5c6e69", bg: "#f4f0e8", border: "#d6ccbc", label: "" };
-    const initials = getInitials(call.contact?.firstName, call.contact?.lastName);
-    const grad = avatarGradient(name);
-    const delay = `${index * 40}ms`;
-
+function Avatar({ call, size = 32 }: { call: CallItem; size?: number }) {
+    const hue = avatarHue(companyName(call) + contactName(call));
     return (
         <div
-            className="group relative bg-[var(--elan-surface)] rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200"
+            className="flex shrink-0 items-center justify-center rounded-xl font-bold"
             style={{
-                borderLeft: `3px solid ${meta.color}`,
-                border: `1px solid rgba(21,32,30,0.13)`,
-                borderLeftWidth: 3,
-                borderLeftColor: meta.color,
-                animation: `dashFadeUp 0.3s ease both ${delay}`,
+                width: size, height: size, fontSize: size * 0.36,
+                background: `hsl(${hue} 45% 93%)`, color: `hsl(${hue} 55% 32%)`,
             }}
+            aria-hidden="true"
         >
-            <div className="flex items-start gap-3 p-3.5">
-                {/* Gradient avatar */}
-                <div
-                    className={cn(
-                        "flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br flex items-center justify-center text-[12px] font-black text-white select-none shadow-sm",
-                        grad
-                    )}
-                >
-                    {initials || "?"}
+            {getInitials(call.contact?.firstName, call.contact?.lastName)}
+        </div>
+    );
+}
+
+/* ── Activity heatmap: answers "are you working my account?" at a glance ── */
+function HeatmapStrip({ days, countsByDay, activeDay, onPickDay }: {
+    days: string[];
+    countsByDay: Record<string, number>;
+    activeDay: string | null;
+    onPickDay: (day: string | null) => void;
+}) {
+    const max = Math.max(1, ...days.map((d) => countsByDay[d] ?? 0));
+    const level = (n: number) => (n === 0 ? 0 : n / max <= 0.25 ? 1 : n / max <= 0.5 ? 2 : n / max <= 0.75 ? 3 : 4);
+    const TONES = ["bg-slate-100", "bg-blue-100", "bg-blue-300", "bg-blue-500", "bg-blue-700"];
+
+    // Pad so each column is a Mon–Sun week.
+    const firstWeekday = (new Date(`${days[0]}T12:00:00`).getDay() + 6) % 7;
+    const cells: (string | null)[] = [...Array<null>(firstWeekday).fill(null), ...days];
+
+    return (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                    Couverture de la période
+                </h2>
+                <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500">
+                    Moins
+                    {TONES.map((t) => <span key={t} className={cn("h-2.5 w-2.5 rounded-sm", t)} />)}
+                    Plus
                 </div>
+            </div>
 
-                <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2 flex-wrap">
-                        <div className="min-w-0">
-                            <p className="text-sm font-bold text-[var(--elan-ink)]">{name}</p>
-                            <div className="flex items-center gap-1 text-xs text-[#7f8e89] mt-0.5">
-                                <Briefcase className="w-3 h-3 flex-shrink-0" />
-                                <span className="truncate">{call.contact?.title ?? "—"} · {co}</span>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                            <ResultBadge result={call.result} resultMeta={resultMeta} />
-                            <span className="text-[10px] text-[#899892] tabular-nums font-medium">
-                                {fmtTime(call.createdAt)}
-                            </span>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 mt-2 flex-wrap">
-                        {dur && (
-                            <span className="flex items-center gap-1 text-[11px] text-[#7f8e89]">
-                                <Clock className="w-3 h-3" />{dur}
-                            </span>
-                        )}
-                        {call.note && (
+            <div className="overflow-x-auto pb-1">
+                <div className="grid grid-flow-col grid-rows-7 gap-1">
+                    {cells.map((day, i) => {
+                        if (!day) return <span key={`pad-${i}`} className="h-3.5 w-3.5" />;
+                        const n = countsByDay[day] ?? 0;
+                        const isActive = activeDay === day;
+                        return (
                             <button
+                                key={day}
                                 type="button"
-                                onClick={() => setNoteOpen((o) => !o)}
-                                className="flex items-center gap-1 text-[11px] text-[var(--elan-petrol)] hover:text-violet-700 font-semibold transition-colors"
-                            >
-                                <ChevronDown className={cn("w-3 h-3 transition-transform duration-200", noteOpen && "rotate-180")} />
-                                Note de l&apos;agent
-                            </button>
-                        )}
-                    </div>
+                                onClick={() => onPickDay(isActive ? null : day)}
+                                title={`${fmtDayLabel(day)} — ${n} appel${n > 1 ? "s" : ""}`}
+                                aria-label={`${fmtDayLabel(day)}, ${n} appels`}
+                                aria-pressed={isActive}
+                                className={cn(
+                                    "h-3.5 w-3.5 rounded-sm transition-all hover:ring-2 hover:ring-slate-400",
+                                    TONES[level(n)],
+                                    isActive && "ring-2 ring-slate-900",
+                                )}
+                            />
+                        );
+                    })}
                 </div>
             </div>
 
-            {/* Contact links strip */}
-            {(call.contact?.email || call.contact?.phone) && (
-                <div className="flex flex-wrap gap-x-5 gap-y-1 px-3.5 py-2 bg-[var(--elan-paper)] border-t border-[#EEF0F8]">
-                    {call.contact?.email && (
-                        <a href={`mailto:${call.contact.email}`} className="flex items-center gap-1.5 text-[11px] text-[#7f8e89] hover:text-[var(--elan-petrol)] transition-colors">
-                            <Mail className="w-3 h-3" />{call.contact.email}
-                        </a>
-                    )}
-                    {call.contact?.phone && (
-                        <a href={`tel:${call.contact.phone}`} className="flex items-center gap-1.5 text-[11px] text-[#7f8e89] hover:text-[var(--elan-petrol)] transition-colors">
-                            <Phone className="w-3 h-3" />{call.contact.phone}
-                        </a>
-                    )}
-                </div>
-            )}
-
-            {/* Collapsible note */}
-            {call.note && noteOpen && (
-                <div className="px-3.5 py-3 border-t border-[#EEF0F8]">
-                    <div className="rounded-xl border border-[rgba(12,59,56,0.12)] bg-gradient-to-br from-[#dbe4df] to-[#f4f0e8] px-3 py-2.5">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-[#0c3b38] mb-1">Note agent</p>
-                        <p className="text-xs text-[#4B4D7A] italic leading-relaxed">&quot;{call.note}&quot;</p>
-                    </div>
-                </div>
+            {activeDay && (
+                <button
+                    type="button"
+                    onClick={() => onPickDay(null)}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
+                >
+                    <X className="h-3 w-3" />
+                    {fmtDayLabel(activeDay)}
+                </button>
             )}
         </div>
     );
 }
 
-// ─── Day Block ────────────────────────────────────────────────────────────────
-function DayBlock({ dateKey: dk, calls, statusOrder, resultMeta, defaultOpen = false }: {
-    dateKey: string; calls: NormalizedCall[]; statusOrder: string[];
-    resultMeta: Record<string, { label: string; color: string; bg: string; border: string }>;
-    defaultOpen?: boolean;
-}) {
-    const [open, setOpen] = useState(defaultOpen);
-    const [resultFilter, setResultFilter] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (!open) setResultFilter(null);
-    }, [open]);
-
-    const counts: Record<string, number> = {};
-    statusOrder.forEach((c) => { counts[c] = 0; });
-    calls.forEach((c) => { counts[c.result] = (counts[c.result] ?? 0) + 1; });
-    const meetings = counts["MEETING_BOOKED"] ?? 0;
-
-    const chipCodes = useMemo(() => {
-        const cts: Record<string, number> = {};
-        statusOrder.forEach((c) => { cts[c] = 0; });
-        calls.forEach((c) => { cts[c.result] = (cts[c.result] ?? 0) + 1; });
-        const ordered = statusOrder.filter((k) => (cts[k] ?? 0) > 0);
-        const rest = Object.keys(cts)
-            .filter((k) => !statusOrder.includes(k) && (cts[k] ?? 0) > 0)
-            .sort();
-        return [...ordered, ...rest];
-    }, [calls, statusOrder]);
-
-    const sortedCalls = useMemo(
-        () => [...calls].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
-        [calls]
-    );
-
-    const displayedCalls = useMemo(() => {
-        if (!resultFilter) return sortedCalls;
-        return sortedCalls.filter((c) => c.result === resultFilter);
-    }, [sortedCalls, resultFilter]);
-
-    const d = new Date(dk + "T12:00:00");
-    const weekday = d.toLocaleDateString("fr-FR", { weekday: "short" });
-    const dayNum = d.getDate();
-    const month = d.toLocaleDateString("fr-FR", { month: "short" });
-
+function CallRow({ call, meta, onOpen }: { call: CallItem; meta: ResultMeta; onOpen: () => void }) {
+    const dur = fmtDuration(call.duration);
     return (
-        <div className="rounded-xl border border-[var(--elan-line)] overflow-hidden bg-[var(--elan-surface)]">
-            <div className="flex items-center gap-2 px-4 py-3 hover:bg-[var(--elan-paper)] transition-colors">
-                <button
-                    type="button"
-                    onClick={() => setOpen((o) => !o)}
-                    className="flex flex-1 min-w-0 items-center gap-4 text-left"
-                >
-                    {/* Date chip – matching BreakdownCharts gradient style */}
-                    <div className="flex-shrink-0 w-[52px] rounded-xl overflow-hidden text-center shadow-sm"
-                        style={{ background: "#0C3B38" }}>
-                        <p className="text-[8px] font-bold uppercase tracking-widest text-white/60 pt-1.5 leading-none">{weekday}</p>
-                        <p className="text-[22px] font-black text-white leading-tight">{dayNum}</p>
-                        <p className="text-[8px] font-bold uppercase tracking-widest text-white/60 pb-1.5 leading-none">{month}</p>
-                    </div>
-
-                    <div className="flex-1 min-w-0 space-y-1.5">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-bold text-[var(--elan-ink)]">
-                                {calls.length} appel{calls.length > 1 ? "s" : ""}
-                            </span>
-                            {meetings > 0 && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-100 text-[11px] font-bold text-emerald-700">
-                                    <Sparkles className="w-2.5 h-2.5" />
-                                    {meetings} RDV
-                                </span>
-                            )}
-                            {/* Summary chips (non-interactive) */}
-                            <div className="flex flex-wrap gap-1 ml-1">
-                                {statusOrder.map((k) => {
-                                    const v = counts[k] ?? 0;
-                                    if (!v || k === "MEETING_BOOKED") return null;
-                                    return (
-                                        <span key={k}
-                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
-                                            style={{ background: `${resultMeta[k]?.color ?? "#64748b"}15`, color: resultMeta[k]?.color ?? "#64748b" }}
-                                        >
-                                            {v} {resultMeta[k]?.label ?? ACTION_RESULT_LABELS[k] ?? k}
-                                        </span>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                        <MiniBar counts={counts} total={calls.length} statusOrder={statusOrder} resultMeta={resultMeta} />
-                    </div>
-                </button>
-
-                <button
-                    type="button"
-                    onClick={() => setOpen((o) => !o)}
-                    className="flex-shrink-0 p-1 rounded-lg text-[#899892] hover:bg-[var(--elan-surface)]/80 hover:text-[var(--elan-petrol)] transition-colors"
-                    aria-expanded={open}
-                    aria-label={open ? "Replier le jour" : "Déplier le jour"}
-                >
-                    <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", open && "rotate-180")} />
-                </button>
-            </div>
-
-            {open && (
-                <>
-                    {chipCodes.length > 0 && (
-                        <div className="border-t border-[#EEF0F8] bg-[var(--elan-surface)] px-4 py-2.5">
-                            <p className="text-[9px] font-bold uppercase tracking-wider text-[#899892] mb-2">
-                                Filtrer par résultat
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                                <button
-                                    type="button"
-                                    onClick={() => setResultFilter(null)}
-                                    className={cn(
-                                        "inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all",
-                                        resultFilter === null
-                                            ? "bg-[var(--elan-amber)] text-[var(--elan-ink)] border-[var(--elan-amber-deep)] shadow-sm shadow-[rgba(255,158,27,0.2)]"
-                                            : "bg-[var(--elan-paper)] text-[#7f8e89] border-[var(--elan-line)] hover:border-[rgba(255,158,27,0.35)]"
-                                    )}
-                                >
-                                    Tous ({calls.length})
-                                </button>
-                                {chipCodes.map((k) => {
-                                    const v = counts[k] ?? 0;
-                                    const col = resultMeta[k]?.color ?? "#64748b";
-                                    const active = resultFilter === k;
-                                    return (
-                                        <button
-                                            key={k}
-                                            type="button"
-                                            onClick={() => setResultFilter(active ? null : k)}
-                                            className={cn(
-                                                "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all",
-                                                active
-                                                    ? "text-white shadow-sm"
-                                                    : "hover:brightness-95"
-                                            )}
-                                            style={
-                                                active
-                                                    ? { background: col, borderColor: col }
-                                                    : {
-                                                        background: `${col}12`,
-                                                        borderColor: `${col}40`,
-                                                        color: col,
-                                                    }
-                                            }
-                                        >
-                                            {v} {resultMeta[k]?.label ?? ACTION_RESULT_LABELS[k] ?? k}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-                    <div className="border-t border-[#EEF0F8] bg-[var(--elan-paper)]/60 px-4 py-3 space-y-2">
-                        {displayedCalls.length === 0 ? (
-                            <p className="text-center text-xs font-medium text-[#7f8e89] py-6">
-                                Aucun appel pour ce résultat sur ce jour.
-                            </p>
-                        ) : (
-                            displayedCalls.map((c, i) => (
-                                <CallCard key={c.id} call={c} resultMeta={resultMeta} index={i} />
-                            ))
-                        )}
-                    </div>
-                </>
-            )}
-        </div>
-    );
-}
-
-// ─── Mission Section ──────────────────────────────────────────────────────────
-function MissionSection({ missionName, calls, defaultOpen, statusOrder, resultMeta, index }: {
-    missionName: string; calls: NormalizedCall[]; defaultOpen: boolean;
-    statusOrder: string[];
-    resultMeta: Record<string, { label: string; color: string; bg: string; border: string }>;
-    index: number;
-}) {
-    const [open, setOpen] = useState(defaultOpen);
-
-    const byDay = useMemo(() => {
-        const map: Record<string, NormalizedCall[]> = {};
-        calls.forEach((c) => {
-            const k = dayKey(c.createdAt);
-            if (!map[k]) map[k] = [];
-            map[k].push(c);
-        });
-        return Object.entries(map).sort(([a], [b]) => b.localeCompare(a));
-    }, [calls]);
-
-    const meetings = calls.filter((c) => c.result === "MEETING_BOOKED").length;
-    const convRate = calls.length ? Math.round((meetings / calls.length) * 100) : 0;
-    const campaigns = [...new Set(calls.map((c) => c.campaign.name))];
-
-    const kpis = [
-        { value: calls.length, label: "appels", from: "from-[#dbe4df]", to: "to-[#f4f0e8]", border: "border-[rgba(12,59,56,0.14)]", text: "text-[#0c3b38]" },
-        { value: byDay.length,  label: "jours",  from: "from-[#f4f0e8]", to: "to-[#ece5d8]", border: "border-[rgba(12,59,56,0.10)]", text: "text-[#394b46]" },
-        { value: meetings,      label: "RDV",    from: "from-[#ecfdf5]", to: "to-[#dbe4df]", border: "border-[rgba(37,116,95,0.18)]", text: "text-[#25745f]" },
-        { value: `${convRate}%`,label: "taux",   from: "from-[#fff8eb]", to: "to-[#fff1d6]", border: "border-[rgba(224,124,0,0.18)]", text: "text-[#e07c00]" },
-    ];
-
-    return (
-        <div
-            className="premium-card overflow-hidden"
-            style={{ animation: `dashFadeUp 0.4s ease both ${index * 80}ms` }}
+        <button
+            type="button"
+            onClick={onOpen}
+            className="group flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left transition-all hover:border-slate-400 hover:shadow-sm"
         >
-            {/* Mission header – mirrors BreakdownCharts header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-4 pb-4 border-b border-[var(--elan-line)]">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0c3b38] to-[#114b46] flex items-center justify-center shadow-sm shadow-[rgba(12,59,56,0.2)] flex-shrink-0">
-                        <Target className="w-4.5 h-4.5 text-[#f4f0e8]" style={{ width: 18, height: 18 }} />
-                    </div>
-                    <div className="min-w-0">
-                        <h3 className="text-sm font-semibold text-[var(--elan-ink)] uppercase tracking-wider truncate">
-                            {missionName}
-                        </h3>
-                        <p className="text-[11px] text-[#7f8e89] mt-0.5 truncate">
-                            {campaigns.join(" · ")}
-                        </p>
-                    </div>
-                </div>
+            <Avatar call={call} />
 
-                {/* KPI chips – same gradient card style as BreakdownCharts */}
-                <div className="flex items-center gap-2 flex-wrap">
-                    {kpis.map(({ value, label, from, to, border, text }) => (
-                        <div
-                            key={label}
-                            className={cn(
-                                "rounded-lg bg-gradient-to-br border px-3 py-1.5 text-center",
-                                from, to, border
-                            )}
-                        >
-                            <p className={cn("text-sm font-black leading-none", text)}>{value}</p>
-                            <p className="text-[9px] uppercase tracking-wider text-[#899892] mt-0.5">{label}</p>
-                        </div>
-                    ))}
-                    <button
-                        type="button"
-                        onClick={() => setOpen((o) => !o)}
-                        className={cn(
-                            "w-8 h-8 rounded-lg border flex items-center justify-center transition-all duration-200",
-                            open
-                                ? "bg-[var(--elan-amber)] border-[var(--elan-amber-deep)] text-[var(--elan-ink)] shadow-sm shadow-[rgba(255,158,27,0.24)]"
-                                : "bg-[var(--elan-paper)] border-[var(--elan-line)] text-[#7f8e89] hover:border-[rgba(255,158,27,0.4)]"
-                        )}
-                    >
-                        <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", open && "rotate-180")} />
-                    </button>
+            <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-baseline gap-2">
+                    <span className="truncate text-xs font-bold text-slate-900">{contactName(call)}</span>
+                    {call.contact?.title && (
+                        <span className="truncate text-[11px] text-slate-500">{call.contact.title}</span>
+                    )}
+                </div>
+                <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-slate-600">
+                    <Briefcase className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true" />
+                    <span className="truncate font-medium">{companyName(call)}</span>
+                    <span className="shrink-0 text-slate-300">·</span>
+                    <span className="truncate text-slate-500">{call.campaign.mission.name}</span>
                 </div>
             </div>
 
-            {/* Day sections */}
-            {open && (
-                <div className="px-5 py-4 space-y-2.5 bg-[#FAFBFE]">
-                    {byDay.map(([dk, dayCalls], i) => (
-                        <DayBlock
-                            key={dk}
-                            dateKey={dk}
-                            calls={dayCalls}
-                            statusOrder={statusOrder}
-                            resultMeta={resultMeta}
-                            defaultOpen={i === 0}
-                        />
-                    ))}
+            <div className="flex shrink-0 items-center gap-3">
+                {dur && (
+                    <span className="hidden items-center gap-1 text-[11px] font-medium text-slate-500 sm:flex">
+                        <Clock className="h-3 w-3" aria-hidden="true" />{dur}
+                    </span>
+                )}
+                <ResultChip result={call.result} meta={meta} />
+                <span className="w-10 text-right text-[11px] font-bold tabular-nums text-slate-500">
+                    {fmtTime(call.createdAt)}
+                </span>
+            </div>
+        </button>
+    );
+}
+
+function CallDetailDrawer({ call, meta, onClose }: { call: CallItem | null; meta: ResultMeta; onClose: () => void }) {
+    const dur = call ? fmtDuration(call.duration) : null;
+    return (
+        <Drawer isOpen={!!call} onClose={onClose} size="md" title="Détail de l'appel">
+            {call && (
+                <div className="space-y-5 p-1">
+                    <div className="flex items-center gap-3">
+                        <Avatar call={call} size={44} />
+                        <div className="min-w-0">
+                            <p className="truncate text-sm font-bold text-slate-900">{contactName(call)}</p>
+                            <p className="truncate text-xs text-slate-500">
+                                {call.contact?.title ? `${call.contact.title} · ` : ""}{companyName(call)}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        <ResultChip result={call.result} meta={meta} />
+                        <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600">
+                            {fmtDayLabel(displayDayKey(call.createdAt))} · {fmtTime(call.createdAt)}
+                        </span>
+                        {dur && (
+                            <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600">
+                                <Clock className="h-3 w-3" />{dur}
+                            </span>
+                        )}
+                    </div>
+
+                    <dl className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        {[
+                            { k: "Mission", v: call.campaign.mission.name },
+                            { k: "Campagne", v: call.campaign.name },
+                            { k: "Secteur", v: call.contact?.company?.industry ?? call.company?.industry ?? "—" },
+                            { k: "Pays", v: call.contact?.company?.country ?? call.company?.country ?? "—" },
+                        ].map(({ k, v }) => (
+                            <div key={k}>
+                                <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{k}</dt>
+                                <dd className="mt-0.5 text-xs font-semibold text-slate-700">{v}</dd>
+                            </div>
+                        ))}
+                    </dl>
+
+                    {(call.contact?.email || call.contact?.phone) && (
+                        <div className="flex flex-col gap-2">
+                            {call.contact?.email && (
+                                <a href={`mailto:${call.contact.email}`}
+                                    className="inline-flex items-center gap-2 text-xs font-medium text-[#1a75ce] hover:underline">
+                                    <Mail className="h-3.5 w-3.5" />{call.contact.email}
+                                </a>
+                            )}
+                            {call.contact?.phone && (
+                                <a href={`tel:${call.contact.phone}`}
+                                    className="inline-flex items-center gap-2 text-xs font-medium text-[#1a75ce] hover:underline">
+                                    <Phone className="h-3.5 w-3.5" />{call.contact.phone}
+                                </a>
+                            )}
+                        </div>
+                    )}
+
+                    {call.note && (
+                        <div>
+                            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                Note de notre commercial
+                            </p>
+                            <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs italic leading-relaxed text-slate-600">
+                                &ldquo;{call.note}&rdquo;
+                            </p>
+                        </div>
+                    )}
                 </div>
             )}
-        </div>
+        </Drawer>
     );
 }
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
-function SkeletonMission() {
+function ListSkeleton() {
     return (
-        <div className="premium-card overflow-hidden animate-pulse">
-            <div className="flex items-center gap-3 px-5 py-4 border-b border-[var(--elan-line)]">
-                <div className="w-9 h-9 rounded-xl bg-[var(--elan-line)]" />
-                <div className="flex-1 space-y-1.5">
-                    <div className="h-3 w-40 rounded-full bg-[var(--elan-line)]" />
-                    <div className="h-2.5 w-24 rounded-full bg-[var(--elan-paper-3)]" />
-                </div>
-                <div className="flex gap-2">
-                    {[1, 2, 3, 4].map((i) => <div key={i} className="w-14 h-10 rounded-lg bg-[var(--elan-paper-3)]" />)}
-                </div>
-            </div>
-            <div className="px-5 py-4 space-y-2.5">
-                {[1, 2].map((i) => (
-                    <div key={i} className="rounded-xl border border-[var(--elan-line)] p-3 space-y-2">
-                        <div className="flex gap-3">
-                            <div className="w-[52px] h-16 rounded-xl bg-[var(--elan-line)]" />
-                            <div className="flex-1 space-y-2 pt-1">
-                                <div className="h-3 w-24 rounded-full bg-[var(--elan-line)]" />
-                                <div className="h-2 w-full rounded-full bg-[var(--elan-paper-3)]" />
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
+        <div className="space-y-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-14 animate-pulse rounded-xl bg-slate-100" />
+            ))}
         </div>
     );
 }
 
-// ─── Normalize ────────────────────────────────────────────────────────────────
-function normalizeCall(c: CallItem): NormalizedCall {
-    const companyName = c.contact?.company?.name ?? c.company?.name ?? "—";
-    return {
-        ...c,
-        contact: c.contact
-            ? { ...c.contact, company: { name: companyName } }
-            : { firstName: null, lastName: null, title: null, email: null, phone: null, company: { name: companyName } },
-    } as NormalizedCall;
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
-export default function ClientPortalActivitePage() {
+/* ═══════════════════════════════════════════════════════════════
+   PAGE
+═══════════════════════════════════════════════════════════════ */
+function ActiviteView() {
     const { error: showError } = useToast();
+    const router = useRouter();
+    const pathname = usePathname();
+    const params = useSearchParams();
+
+    const period      = params.get("p") ?? "30";
+    const urlSearch   = params.get("q") ?? "";
+    const resultFilter = params.get("r");
+    const missionFilter = params.get("m");
+    const dayFilter   = params.get("d");
+
+    /* Search is local so typing never triggers a navigation; the URL catches up on
+       a debounce, keeping the view shareable without a replace() per keystroke. */
+    const [search, setSearch] = useState(urlSearch);
+
     const [calls, setCalls] = useState<CallItem[]>([]);
     const [statusConfig, setStatusConfig] = useState<{ statuses: StatusDef[]; categories: ResultCategoryDef[] } | null>(null);
+    const [configLoaded, setConfigLoaded] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
-    const [search, setSearch] = useState("");
-    const [dateRange, setDateRange] = useState("30");
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [selected, setSelected] = useState<CallItem | null>(null);
 
-    const resultMeta = useMemo(() => {
-        if (statusConfig?.statuses?.length && statusConfig?.categories?.length)
-            return buildResultMeta(statusConfig.statuses, statusConfig.categories);
+    const deferredSearch = useDeferredValue(search);
+
+    /* URL is the single source of filter state — shareable and restorable. */
+    const setParam = useCallback((key: string, value: string | null) => {
+        const next = new URLSearchParams(params.toString());
+        if (value === null || value === "") next.delete(key);
+        else next.set(key, value);
+        const qs = next.toString();
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    }, [params, pathname, router]);
+
+    useEffect(() => {
+        if (search === urlSearch) return;
+        const t = setTimeout(() => setParam("q", search || null), 300);
+        return () => clearTimeout(t);
+    }, [search, urlSearch, setParam]);
+
+    const clearFilters = useCallback(() => {
+        setSearch("");
+        const next = new URLSearchParams();
+        if (period !== "30") next.set("p", period);
+        const qs = next.toString();
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    }, [period, pathname, router]);
+
+    const resultMeta = useMemo<ResultMeta>(() => {
+        if (statusConfig?.statuses?.length) return buildResultMeta(statusConfig.statuses, statusConfig.categories);
         return RESULT_META_FALLBACK;
     }, [statusConfig]);
 
     const statusOrder = useMemo(() => {
         if (statusConfig?.statuses?.length) return statusConfig.statuses.map((s) => s.code);
-        return ["MEETING_BOOKED", "CALLBACK_REQUESTED", "INTERESTED", "NO_RESPONSE", "DISQUALIFIED"];
+        return DEFAULT_STATUS_ORDER;
     }, [statusConfig]);
 
     useEffect(() => {
+        let cancelled = false;
         fetch("/api/client/action-status-config")
             .then((r) => r.json())
             .then((json) => {
-                if (json.success && json.data?.statuses)
+                if (cancelled) return;
+                if (json.success && json.data?.statuses) {
                     setStatusConfig({ statuses: json.data.statuses, categories: json.data.categories ?? [] });
+                }
             })
-            .catch(() => {});
+            .catch(() => undefined)
+            .finally(() => { if (!cancelled) setConfigLoaded(true); });
+        return () => { cancelled = true; };
     }, []);
 
-    const fetchCalls = useMemo(() => async () => {
+    /* Date range is computed once, in business time, and the server result is
+       trusted as-is — no second client-side pass that could drop boundary rows. */
+    const range = useMemo(() => ({
+        start: displayDayKeyDaysAgo(parseInt(period, 10)),
+        end: displayDayKey(new Date()),
+    }), [period]);
+
+    const fetchCalls = useCallback(async () => {
         setIsLoading(true);
         try {
-            const d = new Date();
-            d.setDate(d.getDate() - parseInt(dateRange, 10));
-            const startDate = d.toISOString().split("T")[0];
-            const end = new Date(); end.setHours(23, 59, 59, 999);
-            const endDate = end.toISOString().split("T")[0];
-            const res = await fetch(`/api/client/calls?startDate=${startDate}&endDate=${endDate}`);
+            const res = await fetch(`/api/client/calls?startDate=${range.start}&endDate=${range.end}`);
             const json = await res.json();
-            if (json.success && json.data?.items) setCalls(json.data.items);
-            else showError("Erreur", json.error ?? "Impossible de charger l'activité");
+            if (json.success && json.data?.items) {
+                setCalls(json.data.items);
+                setLastUpdated(new Date());
+            } else {
+                showError("Erreur", json.error ?? "Impossible de charger l'activité");
+            }
         } catch {
             showError("Erreur", "Impossible de charger l'activité");
         } finally {
             setIsLoading(false);
         }
-    }, [dateRange, showError]);
+    }, [range, showError]);
 
-    useEffect(() => { fetchCalls(); }, [fetchCalls]);
+    useEffect(() => { void fetchCalls(); }, [fetchCalls]);
 
-    const dateThreshold = useMemo(() => {
-        const d = new Date(); d.setDate(d.getDate() - parseInt(dateRange, 10)); return d;
-    }, [dateRange]);
+    const missions = useMemo(
+        () => [...new Set(calls.map((c) => c.campaign?.mission?.name).filter(Boolean))].sort(),
+        [calls],
+    );
 
-    const filtered = useMemo(() => {
-        let arr = calls.filter((c) => new Date(c.createdAt) >= dateThreshold);
-        if (search.trim()) {
-            const q = search.toLowerCase();
-            arr = arr.filter((c) =>
-                [c.contact?.firstName, c.contact?.lastName, c.contact?.email, c.contact?.phone,
-                 c.contact?.title, c.contact?.company?.name, c.company?.name,
-                 c.campaign?.mission?.name, c.campaign?.name, c.note]
-                    .filter(Boolean).join(" ").toLowerCase().includes(q)
-            );
-        }
-        return arr;
-    }, [calls, dateThreshold, search]);
-
-    const normalizedFiltered = useMemo(() => filtered.map(normalizeCall), [filtered]);
-
-    const byMission = useMemo(() => {
-        const map: Record<string, NormalizedCall[]> = {};
-        normalizedFiltered.forEach((c) => {
-            const k = c.campaign?.mission?.name ?? "—";
-            if (!map[k]) map[k] = [];
-            map[k].push(c);
+    /* Result counts reflect every filter except the result filter itself, so the
+       chip numbers stay meaningful while one is active. */
+    const preResultFiltered = useMemo(() => {
+        const q = deferredSearch.trim().toLowerCase();
+        return calls.filter((c) => {
+            if (missionFilter && c.campaign?.mission?.name !== missionFilter) return false;
+            if (dayFilter && displayDayKey(c.createdAt) !== dayFilter) return false;
+            if (!q) return true;
+            return [
+                c.contact?.firstName, c.contact?.lastName, c.contact?.email, c.contact?.phone,
+                c.contact?.title, c.contact?.company?.name, c.company?.name,
+                c.campaign?.mission?.name, c.campaign?.name, c.note,
+            ].filter(Boolean).join(" ").toLowerCase().includes(q);
         });
-        return Object.entries(map).sort(([, a], [, b]) => b.length - a.length);
-    }, [normalizedFiltered]);
+    }, [calls, deferredSearch, missionFilter, dayFilter]);
+
+    const resultCounts = useMemo(() => {
+        const counts: Record<string, number> = {};
+        preResultFiltered.forEach((c) => { counts[c.result] = (counts[c.result] ?? 0) + 1; });
+        return counts;
+    }, [preResultFiltered]);
+
+    const filtered = useMemo(
+        () => (resultFilter ? preResultFiltered.filter((c) => c.result === resultFilter) : preResultFiltered),
+        [preResultFiltered, resultFilter],
+    );
+
+    const byDay = useMemo(() => {
+        const map = new Map<string, CallItem[]>();
+        for (const c of filtered) {
+            const k = displayDayKey(c.createdAt);
+            const bucket = map.get(k);
+            if (bucket) bucket.push(c); else map.set(k, [c]);
+        }
+        return [...map.entries()]
+            .sort(([a], [b]) => b.localeCompare(a))
+            .map(([day, items]) => [
+                day,
+                items.sort((x, y) => new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime()),
+            ] as const);
+    }, [filtered]);
+
+    const heatmapDays = useMemo(() => displayDayRange(range.start, range.end), [range]);
+    const countsByDay = useMemo(() => {
+        const counts: Record<string, number> = {};
+        for (const c of calls) {
+            const k = displayDayKey(c.createdAt);
+            counts[k] = (counts[k] ?? 0) + 1;
+        }
+        return counts;
+    }, [calls]);
 
     const stats = useMemo(() => {
-        const meetings = normalizedFiltered.filter((c) => c.result === "MEETING_BOOKED").length;
-        const activeDays = new Set(normalizedFiltered.map((c) => dayKey(c.createdAt))).size;
-        const missions = new Set(normalizedFiltered.map((c) => c.campaign?.mission?.name)).size;
+        const meetings = filtered.filter((c) => c.result === "MEETING_BOOKED").length;
         return {
-            total: normalizedFiltered.length, meetings, activeDays, missions,
-            convRate: normalizedFiltered.length ? Math.round((meetings / normalizedFiltered.length) * 100) : 0,
+            total: filtered.length,
+            meetings,
+            activeDays: new Set(filtered.map((c) => displayDayKey(c.createdAt))).size,
+            missions: new Set(filtered.map((c) => c.campaign?.mission?.name)).size,
+            convRate: filtered.length ? Math.round((meetings / filtered.length) * 100) : 0,
         };
-    }, [normalizedFiltered]);
+    }, [filtered]);
 
-    const PERIODS = [
-        { key: "7",  label: "7 jours" },
-        { key: "30", label: "30 jours" },
-        { key: "60", label: "60 jours" },
-        { key: "90", label: "3 mois" },
+    const hasFilters = !!(search || resultFilter || missionFilter || dayFilter);
+    const busy = isLoading || !configLoaded;
+
+    const KPIS = [
+        { Icon: Activity,     value: stats.total,      label: "Appels passés",    sub: `sur ${period} jours` },
+        { Icon: CalendarDays, value: stats.activeDays, label: "Jours travaillés", sub: "jours d'activité" },
+        { Icon: CheckCircle2, value: stats.meetings,   label: "RDV obtenus",      sub: `taux ${stats.convRate}%` },
+        { Icon: TrendingUp,   value: stats.missions,   label: "Missions actives", sub: "sur la période" },
     ];
 
     return (
-        <div
-            className="min-h-full bg-gradient-to-br from-[var(--elan-paper)] via-[var(--elan-paper)] to-[var(--elan-paper-2)] p-4 md:p-6 space-y-5"
-            style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}
-        >
-            {/* ── Header ── mirrors BreakdownCharts header ── */}
-            <div
-                className="premium-card overflow-hidden"
-                style={{ animation: "dashFadeUp 0.4s ease both" }}
-            >
-                <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-5 pb-4 border-b border-[var(--elan-line)]">
-                    <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#0c3b38] to-[#114b46] flex items-center justify-center shadow-sm shadow-[rgba(12,59,56,0.2)]">
-                            <PhoneCall className="w-4 h-4 text-[#f4f0e8]" />
-                        </div>
-                        <div>
-                            <h1 className="text-sm font-semibold text-[var(--elan-ink)] uppercase tracking-wider">
-                                Activité de prospection
-                            </h1>
-                            <p className="text-[11px] text-[#7f8e89] mt-0.5">
-                                Jours travaillés, contacts appelés et résultats par mission
-                            </p>
-                        </div>
+        <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-5 pb-8">
+            {/* ── Header ── */}
+            <header className="flex flex-col gap-4 border-b-2 border-slate-200 pb-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-800 bg-[#0B0F19] text-[#2890F8] shadow-md shadow-black/15">
+                        <PhoneCall className="h-5 w-5" />
                     </div>
-
-                    <div className="flex items-center gap-2 flex-wrap">
-                        {/* Period selector – same as BreakdownCharts */}
-                        <div className="flex items-center rounded-xl bg-[var(--elan-paper)] border border-[var(--elan-line)] p-0.5 gap-0.5">
-                            {PERIODS.map(({ key, label }) => (
-                                <button
-                                    key={key}
-                                    onClick={() => setDateRange(key)}
-                                    className={cn(
-                                        "text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-all duration-150 whitespace-nowrap",
-                                        dateRange === key
-                                            ? "bg-[var(--elan-surface)] text-[var(--elan-petrol)] shadow-sm"
-                                            : "text-[#7f8e89] hover:text-[#4B4D7A]"
-                                    )}
-                                >
-                                    {label}
-                                </button>
-                            ))}
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => fetchCalls()}
-                            disabled={isLoading}
-                            className="w-8 h-8 rounded-lg border border-[var(--elan-line)] bg-[var(--elan-paper)] flex items-center justify-center text-[#7f8e89] hover:text-[var(--elan-petrol)] hover:border-[rgba(255,158,27,0.4)] transition-all disabled:opacity-50"
-                        >
-                            <RefreshCw className={cn("w-3.5 h-3.5", isLoading && "animate-spin")} />
-                        </button>
-                    </div>
-                </div>
-
-                {/* ── KPI row – same gradient card style as BreakdownCharts ── */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-6 py-5">
-                    {[
-                        {
-                            icon: <Activity className="w-3.5 h-3.5" />,
-                            value: stats.total,
-                            label: "Appels passés",
-                            sub: `sur ${dateRange} jours`,
-                            bg: "from-[#dbe4df] to-[#f4f0e8]",
-                            border: "border-[rgba(12,59,56,0.14)]",
-                            text: "text-[#0c3b38]",
-                        },
-                        {
-                            icon: <CalendarDays className="w-3.5 h-3.5" />,
-                            value: stats.activeDays,
-                            label: "Jours travaillés",
-                            sub: "jours d'activité",
-                            bg: "from-sky-50 to-cyan-50",
-                            border: "border-sky-100/60",
-                            text: "text-sky-600",
-                        },
-                        {
-                            icon: <CheckCircle2 className="w-3.5 h-3.5" />,
-                            value: stats.meetings,
-                            label: "RDV obtenus",
-                            sub: `taux ${stats.convRate}%`,
-                            bg: "from-emerald-50 to-teal-50",
-                            border: "border-emerald-100/60",
-                            text: "text-emerald-600",
-                        },
-                        {
-                            icon: <TrendingUp className="w-3.5 h-3.5" />,
-                            value: stats.missions,
-                            label: "Missions actives",
-                            sub: "sur la période",
-                            bg: "from-[#fff8eb] to-[#fff1d6]",
-                            border: "border-[rgba(224,124,0,0.18)]",
-                            text: "text-[#e07c00]",
-                        },
-                    ].map(({ icon, value, label, sub, bg, border, text }, i) => (
-                        <div
-                            key={label}
-                            className={cn(
-                                "rounded-xl bg-gradient-to-br border p-3.5 flex flex-col gap-1.5",
-                                bg, border
+                    <div>
+                        <h1 className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
+                            Activité de prospection
+                        </h1>
+                        <p className="mt-0.5 text-xs font-medium text-slate-600">
+                            Chaque appel passé pour vous, jour par jour.
+                            {lastUpdated && (
+                                <span className="text-slate-400">
+                                    {" "}· maj {lastUpdated.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                                </span>
                             )}
-                            style={{ animation: `dashFadeUp 0.35s ease both ${100 + i * 60}ms` }}
-                        >
-                            <div className={cn("flex items-center gap-1.5 font-semibold", text)}>
-                                {icon}
-                                <span className="text-[10.5px] uppercase tracking-wide">{label}</span>
-                            </div>
-                            <div className="text-[26px] font-black text-[var(--elan-ink)] leading-none">
-                                {isLoading
-                                    ? <span className="inline-block w-10 h-6 rounded bg-[var(--elan-surface)]/60 animate-pulse" />
-                                    : value}
-                            </div>
-                            <p className="text-[10.5px] text-[#899892]">{sub}</p>
-                        </div>
-                    ))}
+                        </p>
+                    </div>
                 </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 bg-white p-1 shadow-2xs">
+                        {PERIODS.map(({ key, label }) => (
+                            <button key={key} type="button" onClick={() => setParam("p", key)}
+                                aria-pressed={period === key}
+                                className={cn(
+                                    "rounded-lg px-2.5 py-1 text-xs font-bold transition-all",
+                                    period === key ? "bg-[#0B0F19] text-white shadow-xs" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                                )}>
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+                    <button type="button" onClick={() => void fetchCalls()} disabled={busy}
+                        title="Actualiser" aria-label="Actualiser"
+                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-2xs transition-all hover:border-blue-300 hover:text-[#2890F8] disabled:opacity-50">
+                        <RefreshCw className={cn("h-4 w-4", busy && "animate-spin")} />
+                    </button>
+                    <button type="button" onClick={() => exportCSV(filtered, resultMeta)} disabled={!filtered.length}
+                        className="flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 shadow-2xs transition-all hover:bg-slate-50 disabled:opacity-60">
+                        <FileSpreadsheet className="h-4 w-4" />
+                        Exporter{filtered.length ? ` (${filtered.length})` : ""}
+                    </button>
+                </div>
+            </header>
+
+            {/* ── KPIs ── */}
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                {KPIS.map(({ Icon, value, label, sub }) => (
+                    <div key={label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
+                        <div className="flex items-center gap-1.5 text-slate-500">
+                            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span className="text-[10.5px] font-bold uppercase tracking-wider">{label}</span>
+                        </div>
+                        <p className="mt-1 text-2xl font-black leading-none tabular-nums text-slate-900">
+                            {busy ? <span className="inline-block h-6 w-10 animate-pulse rounded bg-slate-200" /> : value}
+                        </p>
+                        <p className="mt-1 text-[11px] font-medium text-slate-500">{sub}</p>
+                    </div>
+                ))}
             </div>
 
-            {/* ── Search & active filters ── */}
-            <div
-                className="flex flex-wrap items-center gap-3"
-                style={{ animation: "dashFadeUp 0.4s ease both 300ms" }}
-            >
-                <div className="relative flex-1 min-w-[200px] max-w-md">
-                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#899892]" />
-                    <input
-                        type="search"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Rechercher un contact, une entreprise, une mission…"
-                        className="w-full h-10 pl-10 pr-9 rounded-xl border border-[var(--elan-line)] bg-[var(--elan-surface)] text-sm text-[var(--elan-ink)] focus:outline-none focus:ring-2 focus:ring-[rgba(255,158,27,0.22)] focus:border-[var(--elan-amber-deep)]/50 shadow-sm placeholder:text-[#899892]"
-                    />
-                    {search && (
-                        <button
-                            type="button"
-                            onClick={() => setSearch("")}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#899892] hover:text-[var(--elan-petrol)] transition-colors"
+            {/* ── Heatmap ── */}
+            {!busy && heatmapDays.length > 0 && (
+                <HeatmapStrip
+                    days={heatmapDays}
+                    countsByDay={countsByDay}
+                    activeDay={dayFilter}
+                    onPickDay={(d) => setParam("d", d)}
+                />
+            )}
+
+            {/* ── Filters ── */}
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative min-w-[220px] flex-1 sm:max-w-sm">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="search"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Contact, entreprise, mission…"
+                            aria-label="Rechercher"
+                            className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-8 text-xs font-medium text-slate-900 transition-all placeholder:text-slate-400 focus:border-[#2890F8] focus:outline-none focus:ring-2 focus:ring-[#2890F8]/20"
+                        />
+                        {search && (
+                            <button type="button" onClick={() => setSearch("")} aria-label="Effacer la recherche"
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
+                                <X className="h-3.5 w-3.5" />
+                            </button>
+                        )}
+                    </div>
+
+                    {missions.length > 1 && (
+                        <select
+                            value={missionFilter ?? ""}
+                            onChange={(e) => setParam("m", e.target.value || null)}
+                            aria-label="Filtrer par mission"
+                            className="h-9 min-w-[150px] cursor-pointer rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 focus:border-[#2890F8] focus:outline-none focus:ring-2 focus:ring-[#2890F8]/20"
                         >
-                            <X className="w-4 h-4" />
+                            <option value="">Toutes les missions</option>
+                            {missions.map((m) => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                    )}
+
+                    {hasFilters && (
+                        <button type="button" onClick={clearFilters}
+                            className="flex h-9 items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-600 transition-all hover:bg-slate-100">
+                            <X className="h-3.5 w-3.5" />Réinitialiser
                         </button>
                     )}
                 </div>
-                {!isLoading && (
-                    <p className="text-[12px] font-semibold text-[#7f8e89]">
-                        {normalizedFiltered.length} appel{normalizedFiltered.length > 1 ? "s" : ""}
-                        {search && <span className="text-[var(--elan-petrol)]"> · filtrés</span>}
-                    </p>
-                )}
+
+                {/* Global result filter — one click, applies across every day and mission. */}
+                <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtrer par résultat">
+                    <button type="button" onClick={() => setParam("r", null)} aria-pressed={!resultFilter}
+                        className={cn(
+                            "flex items-center gap-1.5 rounded-xl border py-1.5 pl-2.5 pr-2 text-[11px] font-bold transition-all",
+                            !resultFilter ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-300 bg-white text-slate-600 hover:border-slate-400",
+                        )}>
+                        Tous
+                        <span className={cn("ml-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-black tabular-nums",
+                            !resultFilter ? "bg-white/20" : "bg-slate-100 text-slate-500")}>
+                            {preResultFiltered.length}
+                        </span>
+                    </button>
+
+                    {statusOrder
+                        .filter((code) => (resultCounts[code] ?? 0) > 0 || resultFilter === code)
+                        .map((code) => {
+                            const m = resultMeta[code] ?? { label: ACTION_RESULT_LABELS[code] ?? code, color: NEUTRAL };
+                            const active = resultFilter === code;
+                            return (
+                                <button key={code} type="button" aria-pressed={active}
+                                    onClick={() => setParam("r", active ? null : code)}
+                                    style={active
+                                        ? { background: m.color, borderColor: m.color, color: "#fff" }
+                                        : { background: `${m.color}12`, borderColor: `${m.color}45`, color: m.color }}
+                                    className="flex items-center gap-1.5 rounded-xl border py-1.5 pl-2.5 pr-2 text-[11px] font-bold transition-all hover:brightness-95">
+                                    {m.label}
+                                    <span className={cn("ml-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-black tabular-nums",
+                                        active ? "bg-white/25" : "bg-white/70")}>
+                                        {resultCounts[code] ?? 0}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                </div>
             </div>
 
-            {/* ── Content ── */}
-            {isLoading ? (
-                <div className="space-y-4">
-                    <SkeletonMission />
-                    <SkeletonMission />
-                </div>
-            ) : byMission.length === 0 ? (
-                <div
-                    className="premium-card flex flex-col items-center justify-center py-20 px-6 text-center"
-                    style={{ animation: "dashFadeUp 0.4s ease both 200ms" }}
-                >
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[var(--elan-paper)] to-[var(--elan-paper-2)] flex items-center justify-center mb-4">
-                        <PhoneCall className="w-6 h-6 text-[#b8c2bd]" />
+            {/* ── List ── */}
+            {busy ? (
+                <ListSkeleton />
+            ) : byDay.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+                    <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
+                        <PhoneCall className="h-6 w-6 text-slate-400" />
                     </div>
-                    <p className="text-sm font-semibold text-[#7f8e89]">Aucune activité trouvée</p>
-                    <p className="text-xs text-[#899892] mt-1">Ajustez la période ou la recherche.</p>
+                    <p className="text-sm font-bold text-slate-700">
+                        {hasFilters ? "Aucun appel ne correspond à ces filtres" : "Aucune activité sur cette période"}
+                    </p>
+                    <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-slate-500">
+                        {hasFilters
+                            ? "Élargissez la recherche ou réinitialisez les filtres pour revoir toute la période."
+                            : "Dès que nos commerciaux appellent pour vous, chaque appel apparaît ici."}
+                    </p>
+                    {hasFilters && (
+                        <button type="button" onClick={clearFilters}
+                            className="mt-4 flex h-9 items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                            <X className="h-3.5 w-3.5" />Réinitialiser les filtres
+                        </button>
+                    )}
                 </div>
             ) : (
-                <div className="space-y-4">
-                    {byMission.map(([mission, mCalls], idx) => (
-                        <MissionSection
-                            key={mission}
-                            missionName={mission}
-                            calls={mCalls}
-                            defaultOpen={idx === 0}
-                            statusOrder={statusOrder}
-                            resultMeta={resultMeta}
-                            index={idx}
-                        />
-                    ))}
+                <div className="space-y-5">
+                    {byDay.map(([day, items]) => {
+                        const dayMeetings = items.filter((c) => c.result === "MEETING_BOOKED").length;
+                        return (
+                            <section key={day}>
+                                <div className="sticky top-0 z-10 -mx-1 mb-2 flex items-center gap-2 bg-white/95 px-1 py-1.5 backdrop-blur-sm">
+                                    <h2 className="text-xs font-black uppercase tracking-wide text-slate-800">
+                                        {fmtDayLabel(day)}
+                                    </h2>
+                                    <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-slate-600">
+                                        {items.length} appel{items.length > 1 ? "s" : ""}
+                                    </span>
+                                    {dayMeetings > 0 && (
+                                        <span className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">
+                                            {dayMeetings} RDV
+                                        </span>
+                                    )}
+                                    <span className="h-px flex-1 bg-slate-200" aria-hidden="true" />
+                                </div>
+
+                                <div className="space-y-2">
+                                    {items.map((c) => (
+                                        <CallRow key={c.id} call={c} meta={resultMeta} onOpen={() => setSelected(c)} />
+                                    ))}
+                                </div>
+                            </section>
+                        );
+                    })}
                 </div>
             )}
 
-            {/* ── Dashboard keyframes (injected once) ── */}
-            <style>{`
-                @keyframes dashFadeUp {
-                    from { opacity: 0; transform: translateY(10px); }
-                    to   { opacity: 1; transform: translateY(0); }
-                }
-            `}</style>
+            <CallDetailDrawer call={selected} meta={resultMeta} onClose={() => setSelected(null)} />
         </div>
+    );
+}
+
+export default function ClientPortalActivitePage() {
+    return (
+        <Suspense fallback={<ListSkeleton />}>
+            <ActiviteView />
+        </Suspense>
     );
 }

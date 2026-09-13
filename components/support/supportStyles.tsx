@@ -43,6 +43,45 @@ export function SupportStyles() {
             .cp-support-root .cp-sup-composer-input::placeholder { color: rgba(8,8,8,0.45); }
             .cp-support-root-dark .cp-sup-composer-input::placeholder { color: rgba(255,255,255,0.45); }
 
+            /* Interactive states — CSS instead of inline JS mouse handlers */
+            .cp-sup-icon-btn {
+                display: inline-flex; align-items: center; justify-content: center;
+                cursor: pointer; transition: background-color 150ms ease, color 150ms ease,
+                    border-color 150ms ease, transform 150ms ease;
+            }
+            .cp-sup-icon-btn:hover:not(:disabled) { background: #e6f0fa; color: #1a75ce; border-color: rgba(40,144,248,0.28); }
+            .cp-sup-icon-btn:active:not(:disabled) { transform: scale(0.94); }
+            .cp-sup-icon-btn:disabled { cursor: not-allowed; }
+
+            .cp-sup-chip { cursor: pointer; transition: transform 150ms ease, box-shadow 150ms ease, filter 150ms ease; }
+            .cp-sup-chip:hover { transform: translateY(-1px); filter: brightness(0.98); }
+            .cp-sup-chip:active { transform: translateY(0); }
+
+            .cp-sup-quick {
+                cursor: pointer;
+                transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+            }
+            .cp-sup-quick:hover { background: #f0f6fc; border-color: rgba(40,144,248,0.24); color: #080808; }
+
+            .cp-support-root :focus-visible {
+                outline: 2px solid #2890F8;
+                outline-offset: 2px;
+            }
+
+            /* Mobile: the panel becomes a full-height sheet instead of a floating card */
+            @media (max-width: 560px) {
+                .cp-sup-panel {
+                    inset: 0 !important;
+                    width: 100% !important;
+                    max-width: 100% !important;
+                    height: 100% !important;
+                    max-height: 100% !important;
+                    border-radius: 0 !important;
+                    border: none !important;
+                }
+                .cp-sup-fab-wrap { bottom: 16px !important; right: 16px !important; }
+            }
+
             @media (prefers-reduced-motion: reduce) {
                 .cp-support-root * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
             }

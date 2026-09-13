@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { BarChart3, Phone, CalendarCheck, TrendingUp, Sparkles, Building2, Users, Briefcase } from "lucide-react";
+import { BarChart3, Phone, CalendarCheck, TrendingUp, Sparkles, Building2, Users, Briefcase, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { calculateBestSegmentInsight } from "@/lib/client/insight-engine";
 
 type BreakdownItem = {
     label: string;
@@ -114,9 +115,11 @@ export function BreakdownCharts() {
             ? Math.round((data.totalRdv / data.totalCalls) * 1000) / 10
             : 0;
 
-    const bestSegment = [...items]
-        .filter((i) => i.calls >= 3)
-        .sort((a, b) => b.rate - a.rate)[0];
+    const bestSegmentInsight = calculateBestSegmentInsight({
+        segments: items,
+        campaignAverageRate: globalRate,
+    });
+    const bestSegment = bestSegmentInsight.segment;
 
     return (
         <div
@@ -165,7 +168,7 @@ export function BreakdownCharts() {
                         {
                             icon: <Phone className="w-3.5 h-3.5" />,
                             value: data?.totalCalls,
-                            label: "Appels passés",
+                            label: "Prospection réalisée",
                             from: "from-[#2890F8]",
                             to: "to-[#1a75ce]",
                             bg: "from-[#e6f0fa] to-[#d8eafc]",
@@ -175,7 +178,7 @@ export function BreakdownCharts() {
                         {
                             icon: <CalendarCheck className="w-3.5 h-3.5" />,
                             value: data?.totalRdv,
-                            label: "RDV décrochés",
+                            label: "RDV obtenus",
                             from: "from-[#1a75ce]",
                             to: "to-[#2890F8]",
                             bg: "from-[#e6f0fa] to-[#d8eafc]",
@@ -344,23 +347,40 @@ export function BreakdownCharts() {
                 )}
 
                 {/* ── Best segment insight ── */}
-                {!isLoading && bestSegment && (
+                {!isLoading && bestSegmentInsight.hasSignificantData && bestSegment && (
                     <div
-                        className="rounded-xl border border-emerald-100 bg-gradient-to-r from-emerald-50/80 to-teal-50/60 px-4 py-3.5 flex items-start gap-3"
+                        className="rounded-xl border border-emerald-200/80 bg-gradient-to-r from-emerald-50/90 to-teal-50/70 p-4 flex items-start gap-3.5 shadow-sm"
                         style={{ animation: "dashFadeUp 0.4s ease both", animationDelay: "600ms" }}
                     >
-                        <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center shrink-0 mt-0.5">
-                            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                        <div className="w-8 h-8 rounded-lg bg-emerald-600/10 border border-emerald-600/20 flex items-center justify-center shrink-0 mt-0.5">
+                            <Sparkles className="w-4 h-4 text-emerald-700" />
                         </div>
-                        <div>
-                            <p className="text-[12.5px] font-bold text-emerald-800">
-                                Meilleur segment : {bestSegment.label}
+                        <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-baseline gap-2">
+                                <span className="text-xs font-bold text-emerald-900 uppercase tracking-wide">
+                                    Segment le plus performant
+                                </span>
+                                <span className="text-sm font-extrabold text-emerald-950">
+                                    {bestSegment.label}
+                                </span>
+                            </div>
+                            <p className="text-xs text-emerald-800/90 mt-1">
+                                <span className="font-bold">{bestSegment.rdv} RDV</span> sur {bestSegment.calls} contacts —{" "}
+                                <span className="font-black text-emerald-900">{bestSegment.rate}% de conversion</span>
                             </p>
-                            <p className="text-[11.5px] text-emerald-700/80 mt-0.5 leading-relaxed">
-                                {bestSegment.rdv} RDV sur {bestSegment.calls} appels —{" "}
-                                <span className="font-bold">{bestSegment.rate}% de conversion</span>
-                            </p>
+                            {bestSegmentInsight.recommendation && (
+                                <p className="mt-2 text-xs font-semibold text-emerald-900 bg-white/75 border border-emerald-200/70 rounded-lg px-2.5 py-1.5 inline-block">
+                                    → {bestSegmentInsight.recommendation}
+                                </p>
+                            )}
                         </div>
+                    </div>
+                )}
+
+                {!isLoading && items.length > 0 && !bestSegmentInsight.hasSignificantData && bestSegmentInsight.notice && (
+                    <div className="rounded-xl border border-[var(--elan-line)] bg-[var(--elan-paper)] p-3.5 flex items-center gap-2.5 text-xs text-[var(--elan-slate)]">
+                        <Info className="w-4 h-4 shrink-0 text-[var(--elan-slate)]" />
+                        <span>{bestSegmentInsight.notice}</span>
                     </div>
                 )}
 

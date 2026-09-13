@@ -175,7 +175,9 @@ body.elan-app :focus-visible {
 }
 
 .elan-logo-compact .elan-logo-image {
-    height: 1.1em;
+    width: 32px;
+    height: 32px;
+    max-height: 32px;
 }
 
 .elan-cadence {
@@ -349,6 +351,12 @@ body.elan-app :focus-visible {
 
 .cp-sidebar-collapsed {
     width: 56px;
+}
+
+.cp-sidebar-collapsed .cp-sidebar-header {
+    padding-left: 0;
+    padding-right: 0;
+    justify-content: center;
 }
 
 .cp-sidebar-hover-expanded {
@@ -1871,9 +1879,12 @@ tbody tr:hover td {
     font-family: var(--font-elan-mono), monospace !important;
 }
 
+/* `to` must not declare a transform: with animation-fill-mode:both the final
+   keyframe is retained, and any transform other than `none` turns the wrapper
+   into a containing block, trapping position:fixed children (support FAB, modals). */
 @keyframes elanContentIn {
     from { opacity: 0; transform: translateY(7px); }
-    to { opacity: 1; transform: translateY(0); }
+    to { opacity: 1; }
 }
 
 @media (max-width: 900px) {

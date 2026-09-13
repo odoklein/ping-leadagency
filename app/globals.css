@@ -3975,6 +3975,24 @@ textarea::placeholder {
         text-decoration: none !important;
         color: inherit !important;
     }
+
+    /* Daily report sheet: A4, no app chrome, accents preserved. */
+    @page {
+        size: A4;
+        margin: 14mm;
+    }
+
+    .cp-topbar {
+        display: none !important;
+    }
+
+    .report-print-shell {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
 }
 
 /* ============================================ */

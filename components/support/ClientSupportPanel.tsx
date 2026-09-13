@@ -2,8 +2,23 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import {
+    ArrowDown,
+    BarChart3,
+    Calendar,
+    CalendarDays,
+    CheckCircle2,
+    History,
+    MapPin,
+    MessageCircle,
+    Send,
+    Wrench,
+    X,
+    Zap,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { SUP_LIGHT } from "./supportStyles";
-import { AvatarRing, SupportBubble, SupportTypingIndicator } from "./SupportBubble";
+import { AvatarRing, SupportBubble } from "./SupportBubble";
 import { SUPPORT_INTENTS } from "@/lib/support/types";
 import type {
     SupportConversationDetailDTO,
@@ -48,43 +63,44 @@ const T = SUP_LIGHT;
 
 const INTENT_STYLES: Record<
     SupportIntent,
-    { color: string; bg: string; border: string; icon: string; label: string }
+    { color: string; bg: string; border: string; Icon: LucideIcon; label: string }
 > = {
     RDV: {
-        color: "#0C3B38",
-        bg: "#DBE4DF",
-        border: "rgba(12,59,56,0.2)",
-        icon: "📅",
+        color: "#1a75ce",
+        bg: "#e6f0fa",
+        border: "rgba(40,144,248,0.22)",
+        Icon: Calendar,
         label: "Question RDV",
     },
     RAPPORT: {
         color: "#155B7A",
         bg: "#E4EEF4",
         border: "rgba(21,91,122,0.18)",
-        icon: "📊",
+        Icon: BarChart3,
         label: "Rapport",
     },
     PROBLEME: {
         color: "#8A4A00",
-        bg: T.accentAmberSoft,
+        bg: "#FDF3E2",
         border: "rgba(201,123,42,0.22)",
-        icon: "🔧",
+        Icon: Wrench,
         label: "Problème",
     },
     AUTRE: {
-        color: "#2B3A2B",
-        bg: "#EFEEE7",
-        border: "rgba(43,58,43,0.14)",
-        icon: "💬",
+        color: "#333333",
+        bg: "#eeeeee",
+        border: "rgba(8,8,8,0.12)",
+        Icon: MessageCircle,
         label: "Autre",
     },
 };
+
+const DRAFT_KEY = "cp-support-draft";
 
 interface ClientSupportPanelProps {
     conversation: SupportConversationDetailDTO;
     onClose: () => void;
     onConversationUpdate: (next: SupportConversationDetailDTO) => void;
-    onManagerTypingChange?: (typing: boolean) => void;
 }
 
 interface UpcomingMeeting {
@@ -97,7 +113,6 @@ export function ClientSupportPanel({
     conversation,
     onClose,
     onConversationUpdate,
-    onManagerTypingChange,
 }: ClientSupportPanelProps) {
     const pathname = usePathname();
     const pageLabel = useMemo(() => currentPageLabel(pathname), [pathname]);
@@ -112,8 +127,8 @@ export function ClientSupportPanel({
     const [showContextBanner, setShowContextBanner] = useState(true);
     const [showQuickReplies, setShowQuickReplies] = useState(false);
     const [showResolvedHistory, setShowResolvedHistory] = useState(false);
-    const [isManagerTyping, setIsManagerTyping] = useState(false);
     const [sending, setSending] = useState(false);
+    const [sendError, setSendError] = useState<string | null>(null);
     const [newMessageCount, setNewMessageCount] = useState(0);
     const [isAtBottom, setIsAtBottom] = useState(true);
     const [upcoming, setUpcoming] = useState<UpcomingMeeting[]>([]);
@@ -125,10 +140,10 @@ export function ClientSupportPanel({
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const panelRef = useRef<HTMLDivElement | null>(null);
 
     const messages = conversation.messages;
     const isResolved = conversation.status === "RESOLVED";
-    const managerOnline = true;
     const latestNewThreadMarkerIndex = [...messages]
         .map((m, idx) => ({ m, idx }))
         .reverse()
@@ -142,12 +157,52 @@ export function ClientSupportPanel({
         : messages;
 
     useEffect(() => {
-        onManagerTypingChange?.(isManagerTyping);
-    }, [isManagerTyping, onManagerTypingChange]);
-
-    useEffect(() => {
         fetch("/api/support/conversation/read", { method: "POST" }).catch(() => undefined);
     }, []);
+
+    // Restore an unsent draft, and focus the composer on open.
+    useEffect(() => {
+        try {
+            const saved = window.localStorage.getItem(DRAFT_KEY);
+            if (saved) setInputValue(saved);
+        } catch {
+            /* storage unavailable */
+        }
+        const id = requestAnimationFrame(() => textareaRef.current?.focus());
+        return () => cancelAnimationFrame(id);
+    }, []);
+
+    useEffect(() => {
+        try {
+            if (inputValue) window.localStorage.setItem(DRAFT_KEY, inputValue);
+            else window.localStorage.removeItem(DRAFT_KEY);
+        } catch {
+            /* storage unavailable */
+        }
+    }, [inputValue]);
+
+    // Escape closes; a click outside the panel and outside the launcher closes too.
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                e.stopPropagation();
+                onClose();
+            }
+        };
+        const onPointerDown = (e: MouseEvent) => {
+            const target = e.target as HTMLElement | null;
+            if (!target) return;
+            if (panelRef.current?.contains(target)) return;
+            if (target.closest(".cp-sup-fab-wrap")) return;
+            onClose();
+        };
+        document.addEventListener("keydown", onKeyDown);
+        document.addEventListener("mousedown", onPointerDown);
+        return () => {
+            document.removeEventListener("keydown", onKeyDown);
+            document.removeEventListener("mousedown", onPointerDown);
+        };
+    }, [onClose]);
 
     useEffect(() => {
         let cancelled = false;
@@ -216,13 +271,18 @@ export function ClientSupportPanel({
     const handleSend = async () => {
         const text = inputValue.trim();
         if (!text || sending) return;
+        const intentAtSend = selectedIntent;
+        const contextAtSend = injectedContext;
+
         setSending(true);
+        setSendError(null);
+
         const optimistic: SupportMessageDTO = {
             id: `tmp-${Date.now()}`,
             conversationId: conversation.id,
             role: "CLIENT",
             content: text,
-            intent: selectedIntent,
+            intent: intentAtSend,
             context: null,
             author: null,
             createdAt: new Date().toISOString(),
@@ -233,10 +293,9 @@ export function ClientSupportPanel({
 
         const ctx: SupportMessageContext = {
             pathname: pathname ?? undefined,
-            pageLabel: injectedContext.pageLabel,
-            rdvRefs:
-                injectedContext.rdvRefs.length > 0 ? injectedContext.rdvRefs : undefined,
-            intent: selectedIntent ?? undefined,
+            pageLabel: contextAtSend.pageLabel,
+            rdvRefs: contextAtSend.rdvRefs.length > 0 ? contextAtSend.rdvRefs : undefined,
+            intent: intentAtSend ?? undefined,
         };
         setInjectedContext({ rdvRefs: [] });
         setSelectedIntent(null);
@@ -247,7 +306,7 @@ export function ClientSupportPanel({
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     content: text,
-                    intent: selectedIntent ?? undefined,
+                    intent: intentAtSend ?? undefined,
                     context: ctx,
                 }),
             });
@@ -268,24 +327,16 @@ export function ClientSupportPanel({
                 resolvedAt: null,
                 resolvedBy: null,
             });
-
-            setIsManagerTyping(true);
-            setTimeout(() => setIsManagerTyping(false), 1600 + Math.random() * 1400);
         } catch (err) {
-            const failureMsg: SupportMessageDTO = {
-                id: `err-${Date.now()}`,
-                conversationId: conversation.id,
-                role: "SYSTEM",
-                content:
-                    err instanceof Error
-                        ? err.message
-                        : "Votre message n'a pas pu être envoyé. Veuillez réessayer.",
-                intent: null,
-                context: null,
-                author: null,
-                createdAt: new Date().toISOString(),
-            };
-            appendMessage(failureMsg);
+            // Roll the optimistic bubble back and hand the text back to the client:
+            // a failed send must be recoverable, not silently swallowed.
+            onConversationUpdate(conversation);
+            setInputValue(text);
+            setSelectedIntent(intentAtSend);
+            setInjectedContext(contextAtSend);
+            setSendError(
+                err instanceof Error ? err.message : "Votre message n'a pas pu être envoyé.",
+            );
         } finally {
             setSending(false);
             textareaRef.current?.focus();
@@ -355,14 +406,16 @@ export function ClientSupportPanel({
 
     return (
         <div
-            className="cp-support-root"
+            ref={panelRef}
+            className="cp-support-root cp-sup-panel"
             role="dialog"
-            aria-label="Panneau de support"
+            aria-modal="false"
+            aria-labelledby="cp-sup-title"
             style={{
                 position: "fixed",
                 bottom: 96,
                 right: 24,
-                zIndex: 99,
+                zIndex: 2147482999,
                 width: 420,
                 maxWidth: "calc(100vw - 32px)",
                 height: 640,
@@ -389,14 +442,10 @@ export function ClientSupportPanel({
                     flexShrink: 0,
                 }}
             >
-                <AvatarRing
-                    name="Équipe support"
-                    size={40}
-                    status={managerOnline ? "online" : "away"}
-                    theme="light"
-                />
+                <AvatarRing name="Équipe support" size={40} status="none" theme="light" />
                 <div style={{ flex: 1, minWidth: 0 }}>
                     <div
+                        id="cp-sup-title"
                         style={{
                             fontSize: 14,
                             fontWeight: 700,
@@ -405,23 +454,24 @@ export function ClientSupportPanel({
                             letterSpacing: "-0.01em",
                         }}
                     >
-                        Équipe support Prospecto
+                        Équipe support Ping
                     </div>
                     <div
                         style={{
                             fontSize: 11.5,
-                            color: managerOnline ? T.brandStrong : T.accentAmber,
+                            color: T.ink3,
                             marginTop: 2,
                             fontWeight: 500,
                         }}
                     >
-                        {managerOnline ? "● En ligne · " : "◌ "}Répond en quelques minutes
+                        Réponse sous quelques heures ouvrées
                     </div>
                 </div>
                 <button
                     type="button"
                     onClick={onClose}
                     aria-label="Fermer le panneau"
+                    className="cp-sup-icon-btn"
                     style={{
                         width: 32,
                         height: 32,
@@ -429,23 +479,10 @@ export function ClientSupportPanel({
                         background: T.paperSunken,
                         border: `1px solid ${T.line}`,
                         color: T.ink3,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: 16,
-                        transition: "all 150ms ease",
-                    }}
-                    onMouseEnter={(e) => {
-                        e.currentTarget.style.background = T.brandSoft;
-                        e.currentTarget.style.color = T.brandStrong;
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.background = T.paperSunken;
-                        e.currentTarget.style.color = T.ink3;
+                        flexShrink: 0,
                     }}
                 >
-                    ✕
+                    <X size={15} aria-hidden="true" />
                 </button>
             </div>
 
@@ -486,7 +523,7 @@ export function ClientSupportPanel({
                                 minWidth: 0,
                             }}
                         >
-                            <span style={{ fontSize: 14 }}>📍</span>
+                            <MapPin size={14} style={{ color: "#8A4A00", flexShrink: 0 }} aria-hidden="true" />
                             <span
                                 style={{
                                     fontSize: 12,
@@ -504,6 +541,7 @@ export function ClientSupportPanel({
                             <button
                                 type="button"
                                 onClick={handleAddContext}
+                                className="cp-sup-chip"
                                 style={{
                                     padding: "3px 10px",
                                     borderRadius: 999,
@@ -512,27 +550,25 @@ export function ClientSupportPanel({
                                     background: "#FDE9CA",
                                     border: "1px solid rgba(201,123,42,0.3)",
                                     color: "#8A4A00",
-                                    cursor: "pointer",
                                 }}
                             >
-                                + Ajouter
+                                Joindre la page
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setShowContextBanner(false)}
                                 aria-label="Fermer le bandeau"
+                                className="cp-sup-icon-btn"
                                 style={{
                                     width: 22,
                                     height: 22,
                                     borderRadius: 6,
-                                    fontSize: 11,
                                     background: "transparent",
                                     border: "none",
                                     color: T.ink3,
-                                    cursor: "pointer",
                                 }}
                             >
-                                ✕
+                                <X size={12} aria-hidden="true" />
                             </button>
                         </div>
                     </div>
@@ -553,21 +589,30 @@ export function ClientSupportPanel({
                             animation: "cpSupSlideDown 0.2s ease both",
                         }}
                     >
-                        <span style={{ fontSize: 12, color: T.ink3 }}>
+                        <span
+                            style={{
+                                fontSize: 12,
+                                color: T.ink3,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
+                            }}
+                        >
+                            <History size={13} aria-hidden="true" />
                             Historique résolu masqué
                         </span>
                         <button
                             type="button"
                             onClick={() => setShowResolvedHistory((v) => !v)}
+                            className="cp-sup-chip"
                             style={{
                                 padding: "4px 10px",
                                 borderRadius: 999,
                                 fontSize: 11.5,
                                 fontWeight: 600,
                                 background: T.brandSoft,
-                                border: `1px solid rgba(99,102,241,0.2)`,
+                                border: `1px solid rgba(40,144,248,0.2)`,
                                 color: T.brandStrong,
-                                cursor: "pointer",
                             }}
                         >
                             {showResolvedHistory ? "Masquer" : "Voir l'historique"}
@@ -619,44 +664,34 @@ export function ClientSupportPanel({
                         >
                             {SUPPORT_INTENTS.map((intent) => {
                                 const style = INTENT_STYLES[intent.id];
+                                const Icon = style.Icon;
                                 return (
                                     <button
                                         key={intent.id}
                                         type="button"
                                         onClick={() => handleIntentSelect(intent.id)}
+                                        className="cp-sup-chip"
                                         style={{
                                             padding: "10px 12px",
                                             borderRadius: T.radiusS,
                                             background: style.bg,
                                             border: `1px solid ${style.border}`,
                                             color: style.color,
-                                            cursor: "pointer",
                                             textAlign: "left",
                                             fontSize: 13,
                                             fontWeight: 600,
                                             display: "flex",
                                             alignItems: "center",
                                             gap: 8,
-                                            transition: "all 150ms ease",
-                                        }}
-                                        onMouseEnter={(e) => {
-                                            e.currentTarget.style.transform = "translateY(-1px)";
-                                        }}
-                                        onMouseLeave={(e) => {
-                                            e.currentTarget.style.transform = "translateY(0)";
                                         }}
                                     >
-                                        <span style={{ fontSize: 16 }}>{style.icon}</span>
+                                        <Icon size={16} style={{ flexShrink: 0 }} aria-hidden="true" />
                                         <span>{style.label}</span>
                                     </button>
                                 );
                             })}
                         </div>
                     </div>
-                )}
-
-                {isManagerTyping && !isResolved && (
-                    <SupportTypingIndicator name="Équipe support" theme="light" />
                 )}
 
                 <div ref={messagesEndRef} />
@@ -674,6 +709,7 @@ export function ClientSupportPanel({
                         <button
                             type="button"
                             onClick={scrollToBottom}
+                            className="cp-sup-chip"
                             style={{
                                 pointerEvents: "auto",
                                 padding: "6px 14px",
@@ -683,16 +719,16 @@ export function ClientSupportPanel({
                                 color: "#fff",
                                 fontSize: 12,
                                 fontWeight: 600,
-                                cursor: "pointer",
                                 display: "flex",
                                 alignItems: "center",
                                 gap: 6,
-                                boxShadow: "0 6px 14px rgba(99,102,241,0.25)",
+                                boxShadow: "0 6px 14px rgba(40,144,248,0.25)",
                                 animation: "cpSupBubbleIn 0.2s ease both",
                                 whiteSpace: "nowrap",
                             }}
                         >
-                            ⬇ {newMessageCount} nouveau{newMessageCount > 1 ? "x" : ""} message
+                            <ArrowDown size={13} aria-hidden="true" />
+                            {newMessageCount} nouveau{newMessageCount > 1 ? "x" : ""} message
                             {newMessageCount > 1 ? "s" : ""}
                         </button>
                     </div>
@@ -705,7 +741,7 @@ export function ClientSupportPanel({
                     style={{
                         padding: "12px 16px",
                         background: T.brandSoft,
-                        borderTop: `1px solid rgba(99,102,241,0.2)`,
+                        borderTop: `1px solid rgba(40,144,248,0.2)`,
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "space-between",
@@ -714,7 +750,7 @@ export function ClientSupportPanel({
                     }}
                 >
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: 16 }}>✅</span>
+                        <CheckCircle2 size={16} style={{ color: T.brandStrong }} aria-hidden="true" />
                         <span style={{ fontSize: 13, color: T.brandStrong, fontWeight: 600 }}>
                             Conversation résolue
                         </span>
@@ -722,6 +758,7 @@ export function ClientSupportPanel({
                     <button
                         type="button"
                         onClick={handleReopen}
+                        className="cp-sup-chip"
                         style={{
                             padding: "4px 12px",
                             borderRadius: 999,
@@ -730,7 +767,6 @@ export function ClientSupportPanel({
                             background: "#fff",
                             border: `1px solid ${T.brand}`,
                             color: T.brandStrong,
-                            cursor: "pointer",
                         }}
                     >
                         Rouvrir
@@ -771,15 +807,18 @@ export function ClientSupportPanel({
                         <button
                             type="button"
                             onClick={() => setShowQuickReplies(false)}
+                            aria-label="Fermer les réponses rapides"
+                            className="cp-sup-icon-btn"
                             style={{
+                                width: 22,
+                                height: 22,
+                                borderRadius: 6,
                                 background: "none",
                                 border: "none",
                                 color: T.ink3,
-                                cursor: "pointer",
-                                fontSize: 14,
                             }}
                         >
-                            ✕
+                            <X size={13} aria-hidden="true" />
                         </button>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -788,6 +827,7 @@ export function ClientSupportPanel({
                                 key={reply}
                                 type="button"
                                 onClick={() => handleQuickReply(reply)}
+                                className="cp-sup-quick"
                                 style={{
                                     padding: "8px 12px",
                                     borderRadius: T.radiusS,
@@ -796,18 +836,6 @@ export function ClientSupportPanel({
                                     border: `1px solid ${T.line}`,
                                     color: T.ink2,
                                     fontSize: 13,
-                                    cursor: "pointer",
-                                    transition: "all 150ms ease",
-                                }}
-                                onMouseEnter={(e) => {
-                                    e.currentTarget.style.background = T.brandSofter;
-                                    e.currentTarget.style.borderColor = "rgba(99,102,241,0.24)";
-                                    e.currentTarget.style.color = T.ink;
-                                }}
-                                onMouseLeave={(e) => {
-                                    e.currentTarget.style.background = T.paperRaised;
-                                    e.currentTarget.style.borderColor = T.line;
-                                    e.currentTarget.style.color = T.ink2;
                                 }}
                             >
                                 {reply}
@@ -848,7 +876,11 @@ export function ClientSupportPanel({
                                     fontWeight: 600,
                                 }}
                             >
-                                {INTENT_STYLES[selectedIntent].icon} {INTENT_STYLES[selectedIntent].label}
+                                {(() => {
+                                    const Icon = INTENT_STYLES[selectedIntent].Icon;
+                                    return <Icon size={13} aria-hidden="true" />;
+                                })()}
+                                {INTENT_STYLES[selectedIntent].label}
                                 <button
                                     type="button"
                                     onClick={() => setSelectedIntent(null)}
@@ -858,12 +890,12 @@ export function ClientSupportPanel({
                                         border: "none",
                                         color: INTENT_STYLES[selectedIntent].color,
                                         cursor: "pointer",
-                                        fontSize: 12,
+                                        display: "inline-flex",
                                         padding: 0,
                                         marginLeft: 2,
                                     }}
                                 >
-                                    ✕
+                                    <X size={12} aria-hidden="true" />
                                 </button>
                             </span>
                         </div>
@@ -884,20 +916,47 @@ export function ClientSupportPanel({
                                     key={m.id}
                                     type="button"
                                     onClick={() => handleMeetingTag(m)}
+                                    className="cp-sup-chip"
                                     style={{
                                         padding: "4px 10px",
                                         borderRadius: 999,
                                         fontSize: 11.5,
                                         fontWeight: 500,
                                         background: T.brandSofter,
-                                        border: `1px solid rgba(99,102,241,0.22)`,
+                                        border: `1px solid rgba(40,144,248,0.22)`,
                                         color: T.brandStrong,
-                                        cursor: "pointer",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: 5,
                                     }}
                                 >
-                                    📅 {m.label}
+                                    <CalendarDays size={12} aria-hidden="true" />
+                                    {m.label}
                                 </button>
                             ))}
+                        </div>
+                    )}
+
+                    {sendError && (
+                        <div
+                            role="alert"
+                            style={{
+                                marginBottom: 8,
+                                padding: "8px 10px",
+                                borderRadius: T.radiusXS,
+                                background: T.dangerSoft,
+                                border: `1px solid rgba(185,67,62,0.22)`,
+                                color: T.danger,
+                                fontSize: 11.5,
+                                fontWeight: 500,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
+                                animation: "cpSupSlideDown 0.2s ease both",
+                            }}
+                        >
+                            <X size={13} style={{ flexShrink: 0 }} aria-hidden="true" />
+                            {sendError} Votre message a été conservé — réessayez.
                         </div>
                     )}
 
@@ -907,23 +966,19 @@ export function ClientSupportPanel({
                             onClick={() => setShowQuickReplies((v) => !v)}
                             title="Réponses rapides"
                             aria-label="Afficher les réponses rapides"
+                            aria-pressed={showQuickReplies}
+                            className="cp-sup-icon-btn"
                             style={{
                                 width: 36,
                                 height: 36,
                                 borderRadius: T.radiusS,
                                 flexShrink: 0,
                                 background: showQuickReplies ? T.brandSoft : T.paperSunken,
-                                border: `1px solid ${showQuickReplies ? "rgba(99,102,241,0.28)" : T.line}`,
+                                border: `1px solid ${showQuickReplies ? "rgba(40,144,248,0.28)" : T.line}`,
                                 color: showQuickReplies ? T.brandStrong : T.ink3,
-                                cursor: "pointer",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                fontSize: 16,
-                                transition: "all 150ms ease",
                             }}
                         >
-                            ⚡
+                            <Zap size={16} aria-hidden="true" />
                         </button>
 
                         <div
@@ -990,23 +1045,11 @@ export function ClientSupportPanel({
                                 transition: "all 200ms cubic-bezier(.34,1.56,.64,1)",
                                 transform: canSend ? "scale(1)" : "scale(0.95)",
                                 boxShadow: canSend
-                                    ? "0 6px 14px rgba(99,102,241,0.25)"
+                                    ? "0 6px 14px rgba(40,144,248,0.25)"
                                     : "none",
                             }}
                         >
-                            <svg
-                                width={16}
-                                height={16}
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth={2.5}
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                            >
-                                <path d="M22 2 11 13" />
-                                <path d="M22 2 15 22 11 13 2 9l20-7z" />
-                            </svg>
+                            <Send size={15} aria-hidden="true" />
                         </button>
                     </div>
 

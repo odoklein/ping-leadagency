@@ -3,6 +3,29 @@ import { DateTime } from "luxon";
 export type DateOnly = string; // Format: YYYY-MM-DD
 export type UTCDateTime = string; // Format: ISO 8601 UTC
 
+/** Business timezone. All client-facing day grouping must use this, not browser local
+ *  time, so the same record never lands on different days across two pages. */
+export const DISPLAY_TZ = "Europe/Paris";
+
+/** Day bucket (YYYY-MM-DD) for a timestamp, in business time. */
+export function displayDayKey(input: string | Date): DateOnly {
+    return DateTime.fromJSDate(new Date(input)).setZone(DISPLAY_TZ).toFormat("yyyy-MM-dd");
+}
+
+/** Day bucket N days before today, in business time. */
+export function displayDayKeyDaysAgo(days: number): DateOnly {
+    return DateTime.now().setZone(DISPLAY_TZ).minus({ days }).toFormat("yyyy-MM-dd");
+}
+
+/** Inclusive list of day buckets from `from` to `to`, in business time. */
+export function displayDayRange(from: DateOnly, to: DateOnly): DateOnly[] {
+    const start = DateTime.fromISO(from, { zone: DISPLAY_TZ }).startOf("day");
+    const end = DateTime.fromISO(to, { zone: DISPLAY_TZ }).startOf("day");
+    const out: DateOnly[] = [];
+    for (let d = start; d <= end; d = d.plus({ days: 1 })) out.push(d.toFormat("yyyy-MM-dd"));
+    return out;
+}
+
 /**
  * Validates and parses a DateOnly string strictly as YYYY-MM-DD.
  */

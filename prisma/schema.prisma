@@ -660,6 +660,9 @@ model Client {
   // Client Portal: shareable report links
   sharedReportLinks SharedReportLink[]
 
+  // Client Portal: AI-generated daily reports
+  dailyReports  ClientDailyReport[]
+
   // Interlocuteurs (client's own sales team / commercials)
   interlocuteurs ClientInterlocuteur[]
 
@@ -3289,6 +3292,40 @@ model SharedReportLink {
 
   @@index([token])
   @@index([clientId])
+}
+
+// ============================================
+// CLIENT PORTAL: AI-generated daily report
+// One row per client per day (Europe/Paris). `metrics` is the deterministic
+// SQL snapshot the narrative was written from - the model never invents a
+// number, and the snapshot keeps an archived report reproducible.
+// The unique (clientId, reportDate) pair doubles as the generation lock.
+// ============================================
+
+model ClientDailyReport {
+  id           String   @id @default(cuid())
+  clientId     String
+  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  reportDate   DateTime @db.Date
+  periodStart  DateTime
+  periodEnd    DateTime
+
+  metrics      Json
+  narrative    Json?
+
+  status       String   @default("pending") // pending | completed | fallback | failed
+  modelUsed    String?
+  tokensUsed   Int?
+  durationMs   Int?
+  errorMessage String?  @db.Text
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([clientId, reportDate])
+  @@index([clientId, reportDate])
+  @@index([status])
 }
 
 // ============================================

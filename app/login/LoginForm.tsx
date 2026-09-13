@@ -13,12 +13,9 @@ import {
     Loader2,
     Lock,
     Mail,
-    Shield,
     Trash2,
     UserCircle2,
-    Sparkles,
     Zap,
-    CheckCircle2,
     Activity,
     LockKeyhole
 } from "lucide-react";
@@ -255,44 +252,37 @@ export default function LoginForm() {
             
             {/* ── Left Side: Executive Obsidian Platform Showcase ── */}
             <aside className="relative hidden lg:flex flex-col justify-between p-12 xl:p-16 bg-gradient-to-br from-[#060911] via-[#09101F] to-[#04060B] text-white overflow-hidden border-r border-slate-800/60">
-                {/* Ambient glow effects */}
-                <div className="absolute top-0 right-0 w-96 h-96 bg-[#2890F8]/15 rounded-full blur-[100px] pointer-events-none" />
-                <div className="absolute bottom-12 left-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-[90px] pointer-events-none" />
+                {/* Ambient background texture */}
                 <div className="absolute inset-0 bg-[radial-gradient(#ffffff08_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
 
                 {/* Top Brand */}
                 <div className="relative z-10 flex items-center justify-between">
                     <ElanLogo className="text-[44px]" />
-                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[11px] font-semibold text-slate-300">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                        Console v2.6
-                    </div>
                 </div>
 
-                {/* Center Core Message (Concise & Mature) */}
+                {/* Center Core Message */}
                 <div className="relative z-10 my-auto py-12 max-w-lg space-y-6">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-[#2890F8]/10 border border-[#2890F8]/20 text-[#2890F8] text-[11px] font-black uppercase tracking-wider">
-                        <Sparkles className="w-3.5 h-3.5" />
-                        Plateforme d'Intelligence Commerciale
-                    </div>
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                        Console de prospection
+                    </span>
 
-                    <h1 className="text-4xl xl:text-5xl font-black tracking-tight leading-[1.08] text-white">
-                        L'excellence commerciale, orchestrée.
+                    <h1 className="text-3xl xl:text-4xl font-bold tracking-tight leading-[1.15] text-white">
+                        Pilotez votre prospection commerciale.
                     </h1>
 
                     <p className="text-base text-slate-300/90 leading-relaxed font-normal">
-                        Console centralisée pour le pilotage des campagnes sortantes, la synchronisation IA et la performance de vos équipes.
+                        Campagnes, intelligence artificielle et performance des équipes, réunies dans une seule console.
                     </p>
 
-                    {/* Executive Metric / Feature Strips */}
+                    {/* Feature Strips */}
                     <div className="grid grid-cols-1 gap-3 pt-4">
                         <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.04] border border-white/[0.08] backdrop-blur-xs">
                             <div className="w-9 h-9 rounded-xl bg-[#2890F8]/20 border border-[#2890F8]/30 flex items-center justify-center text-[#2890F8] flex-shrink-0">
                                 <Zap className="w-4 h-4" />
                             </div>
                             <div>
-                                <h4 className="text-xs font-bold text-white">Intelligence Vocale &amp; IA</h4>
-                                <p className="text-[11px] text-slate-400">Mistral AI Scripting &amp; Synchronisation Leexi</p>
+                                <h4 className="text-xs font-semibold text-white">Intelligence vocale &amp; IA</h4>
+                                <p className="text-[11px] text-slate-400">Mistral AI Scripting &amp; synchronisation Leexi</p>
                             </div>
                         </div>
 
@@ -301,8 +291,8 @@ export default function LoginForm() {
                                 <Activity className="w-4 h-4" />
                             </div>
                             <div>
-                                <h4 className="text-xs font-bold text-white">Cadence &amp; Prospection en Direct</h4>
-                                <p className="text-[11px] text-slate-400">Attribution automatisée des flux d'appels et RDVs</p>
+                                <h4 className="text-xs font-semibold text-white">Cadence &amp; prospection en direct</h4>
+                                <p className="text-[11px] text-slate-400">Attribution automatisée des flux d&apos;appels et RDV</p>
                             </div>
                         </div>
                     </div>
@@ -321,11 +311,8 @@ export default function LoginForm() {
             <section className="relative flex flex-col justify-between items-center p-6 sm:p-12 lg:p-16 min-h-[100dvh] bg-[#FCFAFF]">
                 
                 {/* Top Mobile Brand (visible only on small screens) */}
-                <div className="w-full flex lg:hidden items-center justify-between mb-8 max-w-md">
+                <div className="w-full flex lg:hidden items-center mb-8 max-w-md">
                     <ElanLogo tone="petrol" className="text-[34px]" />
-                    <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-blue-50 text-[#2890F8] border border-blue-100">
-                        Espace Sécurisé
-                    </span>
                 </div>
 
                 {/* Main Card Container */}
@@ -336,10 +323,10 @@ export default function LoginForm() {
                         {view === "accounts" && recentAccounts.length > 0 ? (
                             <div className="space-y-6">
                                 <div>
-                                    <span className="text-[10px] font-black uppercase tracking-wider text-[#2890F8] bg-blue-50 px-2.5 py-1 rounded-md">
-                                        Espace de Travail
+                                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[#2890F8] bg-blue-50 px-2.5 py-1 rounded-md">
+                                        Espace de travail
                                     </span>
-                                    <h2 className="text-2xl font-black text-slate-900 tracking-tight mt-3">
+                                    <h2 className="text-2xl font-bold text-slate-900 tracking-tight mt-3">
                                         Bon retour
                                     </h2>
                                     <p className="text-xs text-slate-500 mt-1">
@@ -421,11 +408,11 @@ export default function LoginForm() {
                                         </div>
                                     ) : (
                                         <div>
-                                            <span className="text-[10px] font-black uppercase tracking-wider text-[#2890F8] bg-blue-50 px-2.5 py-1 rounded-md">
-                                                Espace Sécurisé
-                                            </span>
-                                            <h2 className="text-2xl font-black text-slate-900 tracking-tight mt-3">
+                                            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#2890F8] bg-blue-50 px-2.5 py-1 rounded-md">
                                                 Connexion
+                                            </span>
+                                            <h2 className="text-2xl font-bold text-slate-900 tracking-tight mt-3">
+                                                Accéder à votre compte
                                             </h2>
                                             <p className="text-xs text-slate-500 mt-1">
                                                 Entrez vos identifiants pour accéder à votre console.
@@ -537,10 +524,10 @@ export default function LoginForm() {
                             </div>
                         )}
 
-                        {/* Security Badge */}
-                        <div className="mt-8 pt-5 border-t border-slate-100 flex items-center justify-center gap-2 text-center text-[11px] text-slate-400 font-medium">
-                            <LockKeyhole className="w-3.5 h-3.5 text-slate-400" />
-                            <span>Connexion sécurisée chiffrée SSL / TLS 256-bit</span>
+                        {/* Security note */}
+                        <div className="mt-8 pt-5 border-t border-slate-100 flex items-center justify-center gap-1.5 text-center text-[11px] text-slate-400 font-medium">
+                            <LockKeyhole className="w-3.5 h-3.5" />
+                            <span>Connexion chiffrée &middot; réservée aux équipes Suzalink</span>
                         </div>
                     </div>
                 </div>

@@ -1,544 +1,204 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Button, useToast, Card, Badge } from "@/components/ui";
-import { FileDown, Share2, Check, Loader2, Calendar, TrendingUp, BarChart3, FileText, Mic, Copy, ChevronDown, ChevronUp } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
-import { ProgressBar } from "@/components/ui/ProgressBar";
+import { useCallback, useEffect, useState } from "react";
+import { FileDown, Loader2, RefreshCw, Share2, Sparkles } from "lucide-react";
+import { Button, useToast } from "@/components/ui";
 import { ReportingSkeleton } from "@/components/client/skeletons";
+import { ReportDocument } from "@/components/reporting/artifacts/ReportDocument";
+import { useClientDailyReport } from "@/hooks/useClientDailyReport";
 import { trackEvent, UMAMI_EVENTS } from "@/lib/analytics/umami";
 
-// Session & CR types (same shape as manager view)
-type SessionType = "Kick-Off" | "Onboarding" | "Validation" | "Reporting" | "Suivi" | "Autre";
-interface SessionTask {
-    id: string;
-    label: string;
-    assignee?: string;
-    assigneeRole?: "SDR" | "MANAGER" | "DEV" | "ALWAYS";
-    priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
-    doneAt?: string | null;
-}
-interface ClientSession {
-    id: string;
-    type: SessionType;
-    date: string;
-    leexiId?: string;
-    recordingUrl?: string;
-    crMarkdown?: string;
-    summaryEmail?: string;
-    tasks: SessionTask[];
-    createdAt: string;
-}
-const SESSION_TYPE_COLORS: Record<SessionType, string> = {
-    "Kick-Off": "bg-[#dbe4df] text-[#0c3b38] border-[rgba(12,59,56,0.18)]",
-    "Onboarding": "bg-emerald-100 text-emerald-700 border-emerald-200",
-    "Validation": "bg-[#fff1d6] text-[#e07c00] border-[rgba(224,124,0,0.22)]",
-    "Reporting": "bg-amber-100 text-amber-700 border-amber-200",
-    "Suivi": "bg-[#ece5d8] text-[#5c6e69] border-[rgba(21,32,30,0.13)]",
-    "Autre": "bg-[#f4f0e8] text-[#394b46] border-[rgba(12,59,56,0.14)]",
-};
-const ROLE_BADGE: Record<string, { color: string; bg: string; label: string }> = {
-    SDR: { color: "#25745f", bg: "rgba(37,116,95,0.1)", label: "SDR" },
-    MANAGER: { color: "#e07c00", bg: "rgba(224,124,0,0.1)", label: "Manager" },
-    DEV: { color: "#0C3B38", bg: "rgba(219,228,223,0.7)", label: "Dev" },
-    ALWAYS: { color: "#0C3B38", bg: "rgba(219,228,223,0.7)", label: "Tous" },
-};
-const PRIORITY_INDICATOR: Record<string, { color: string; label: string }> = {
-    URGENT: { color: "#b9433e", label: "⚡" },
-    HIGH: { color: "#e07c00", label: "↑" },
-    MEDIUM: { color: "#0C3B38", label: "→" },
-    LOW: { color: "#6B7280", label: "↓" },
-};
-
-interface MonthlySummary {
-    month: number;
-    year: number;
-    meetingsBooked: number;
-    callsMade: number;
-    contactsReached: number;
-    objective: number;
+interface HistoryEntry {
+    reportDate: string;
+    status: string;
+    headline: string;
+    generatedAt: string;
 }
 
-const MONTH_NAMES = [
-    "", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
-    "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
-];
+/** Today in Europe/Paris, yyyy-MM-dd — matches how reports are dated server-side. */
+function parisToday(): string {
+    return new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Europe/Paris",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).format(new Date());
+}
+
+function formatArchiveLabel(isoDate: string): string {
+    const [year, month, day] = isoDate.split("-").map(Number);
+    return new Date(year, (month ?? 1) - 1, day ?? 1).toLocaleDateString("fr-FR", {
+        weekday: "short",
+        day: "numeric",
+        month: "long",
+    });
+}
 
 export default function ClientPortalReportingPage() {
     const toast = useToast();
-    const [data, setData] = useState<MonthlySummary[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [sharingMonth, setSharingMonth] = useState<string | null>(null);
-    const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
+    const [selectedDate, setSelectedDate] = useState<string | null>(null);
+    const [history, setHistory] = useState<HistoryEntry[]>([]);
+    const [isSharing, setIsSharing] = useState(false);
+    const [todayReportDate] = useState(parisToday);
 
-    // Sessions & CRs (same data as manager view)
-    const [sessions, setSessions] = useState<ClientSession[]>([]);
-    const [isLoadingSessions, setIsLoadingSessions] = useState(true);
-    const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
-    const [showCRTab, setShowCRTab] = useState<"cr" | "email">("cr");
+    const { payload, isLoading, isGenerating, error, refresh, isRefreshing } = useClientDailyReport({
+        date: selectedDate,
+    });
 
     useEffect(() => {
         (async () => {
             try {
-                const res = await fetch("/api/client/reporting/monthly-summary");
+                const res = await fetch("/api/client/reporting/daily/history?limit=30");
                 const json = await res.json();
-                if (json.success) {
-                    setData(json.data ?? []);
-                    trackEvent(UMAMI_EVENTS.REPORT_VIEWED, { monthsAvailable: json.data?.length ?? 0 });
-                }
-            } catch (e) {
-                console.error("Failed to load reporting data:", e);
-            } finally {
-                setIsLoading(false);
+                if (json.success) setHistory(json.data ?? []);
+            } catch {
+                // The archive rail is a convenience; its absence must not break the page.
             }
         })();
-    }, []);
+    }, [payload?.generatedAt]);
 
+    const viewedReportDate = payload?.reportDate;
     useEffect(() => {
-        (async () => {
-            try {
-                const res = await fetch("/api/client/sessions");
-                const json = await res.json();
-                if (json.success) setSessions(json.data ?? []);
-            } catch (e) {
-                console.error("Failed to load sessions:", e);
-            } finally {
-                setIsLoadingSessions(false);
-            }
-        })();
-    }, []);
+        if (viewedReportDate) trackEvent(UMAMI_EVENTS.REPORT_VIEWED, { reportDate: viewedReportDate });
+    }, [viewedReportDate]);
 
-    const totalMeetings = data.reduce((sum, d) => sum + d.meetingsBooked, 0);
-    const maxMeetings = Math.max(...data.map((d) => d.meetingsBooked), 1);
-    const now = new Date();
+    const handleDownload = useCallback(() => {
+        if (!payload) return;
+        const params = payload.isArchive ? `?date=${encodeURIComponent(payload.reportDate)}` : "";
+        window.open(`/client/portal/reporting/print${params}`, "_blank", "noopener");
+    }, [payload]);
 
-    const handleShare = useCallback(async (entry: MonthlySummary) => {
-        const key = `${entry.year}-${entry.month}`;
-        setSharingMonth(key);
+    const handleRefresh = useCallback(async () => {
+        await refresh();
+        toast.success("Rapport actualisé", "Les chiffres et l'analyse viennent d'être recalculés.");
+    }, [refresh, toast]);
+
+    /** Shareable link on the current month — same backend as before the redesign. */
+    const handleShare = useCallback(async () => {
+        setIsSharing(true);
         try {
-            const dateFrom = new Date(entry.year, entry.month - 1, 1).toISOString();
-            const dateTo = new Date(entry.year, entry.month, 0, 23, 59, 59, 999).toISOString();
+            const now = new Date();
+            const dateFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+            const dateTo = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
             const res = await fetch("/api/client/reporting/share", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ dateFrom, dateTo }),
             });
             const json = await res.json();
-            if (json.success && json.data?.url) {
-                await navigator.clipboard.writeText(json.data.url);
-                toast.success("Lien copie !", "Valable 30 jours. Collez-le dans un email.");
-            } else {
-                throw new Error(json.error || "Erreur");
-            }
+            if (!json.success || !json.data?.url) throw new Error(json.error || "Erreur");
+            await navigator.clipboard.writeText(json.data.url);
+            toast.success("Lien copié", "Valable 30 jours. Collez-le dans un email.");
         } catch {
-            toast.error("Erreur", "Impossible de generer le lien de partage");
+            toast.error("Erreur", "Impossible de générer le lien de partage");
         } finally {
-            setSharingMonth(null);
+            setIsSharing(false);
         }
     }, [toast]);
 
-    const handlePdf = useCallback(async (entry: MonthlySummary) => {
-        const key = `${entry.year}-${entry.month}`;
-        setGeneratingPdf(key);
-        try {
-            const dateFrom = new Date(entry.year, entry.month - 1, 1).toISOString().split("T")[0];
-            const dateTo = new Date(entry.year, entry.month, 0).toISOString().split("T")[0];
-            const params = new URLSearchParams({ dateFrom, dateTo, comparePrevious: "false" });
-            const res = await fetch(`/api/client/reporting/pdf?${params}`);
-            if (!res.ok) {
-                const message = "Impossible de generer le rapport PDF";
-                toast.error("Erreur", message);
-                return;
-            }
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `rapport-${MONTH_NAMES[entry.month]}-${entry.year}.pdf`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            URL.revokeObjectURL(url);
-            toast.success("Rapport telecharge");
-        } catch {
-            toast.error("Erreur", "Impossible de generer le rapport PDF");
-        } finally {
-            setGeneratingPdf(null);
-        }
-    }, [toast]);
-
-    if (isLoading) return <ReportingSkeleton />;
+    if (isLoading && !payload) return <ReportingSkeleton />;
 
     return (
-        <div className="min-h-full bg-gradient-to-br from-[var(--elan-paper)] via-[var(--elan-paper)] to-[var(--elan-paper-2)] p-4 md:p-6 space-y-8">
-            {/* Header */}
-            <div className="animate-fade-up">
-                <h1 className="text-2xl font-bold text-[var(--elan-ink)] tracking-tight">Rapports</h1>
-                <p className="text-sm text-[var(--elan-slate)] mt-1">Suivez l&apos;evolution de vos missions</p>
-            </div>
+        <div className="min-h-full bg-[var(--elan-paper)] p-4 md:p-6">
+            <div className="max-w-5xl mx-auto space-y-6">
+                {/* Header */}
+                <div className="flex flex-wrap items-end justify-between gap-4 animate-fade-up">
+                    <div>
+                        <h1 className="text-2xl font-bold text-[var(--elan-ink)] tracking-tight">Rapports</h1>
+                        <p className="text-sm text-[var(--elan-slate)] mt-1">
+                            Votre activité de prospection, analysée et mise à jour chaque jour.
+                        </p>
+                    </div>
 
-            {/* Sessions & Comptes Rendus — same view as manager (read-only) */}
-            <div className="animate-fade-up space-y-4" style={{ animationDelay: "40ms" }}>
-                <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#0c3b38] to-[#114b46] flex items-center justify-center shadow-sm shadow-[rgba(12,59,56,0.2)]">
-                        <FileText className="w-4 h-4 text-[#f4f0e8]" />
+                    <div className="flex flex-wrap items-center gap-2">
+                        {history.length > 0 && (
+                            <select
+                                value={selectedDate ?? ""}
+                                onChange={(event) => setSelectedDate(event.target.value || null)}
+                                className="h-9 rounded-xl border border-[var(--elan-line)] bg-[var(--elan-surface)] px-3 text-sm text-[var(--elan-ink)] focus:outline-none focus:border-[var(--elan-amber)]"
+                                aria-label="Choisir un rapport"
+                            >
+                                <option value="">Aujourd&apos;hui</option>
+                                {history
+                                    // Today already has its own option above.
+                                    .filter((entry) => entry.reportDate !== todayReportDate)
+                                    .map((entry) => (
+                                        <option key={entry.reportDate} value={entry.reportDate}>
+                                            {formatArchiveLabel(entry.reportDate)}
+                                        </option>
+                                    ))}
+                            </select>
+                        )}
+
+                        {!selectedDate && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-2 rounded-xl"
+                                onClick={handleRefresh}
+                                disabled={isRefreshing || isGenerating}
+                            >
+                                {isRefreshing ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                    <RefreshCw className="w-3.5 h-3.5" />
+                                )}
+                                Actualiser
+                            </Button>
+                        )}
+
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2 rounded-xl"
+                            onClick={handleShare}
+                            disabled={isSharing}
+                        >
+                            {isSharing ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                                <Share2 className="w-3.5 h-3.5" />
+                            )}
+                            Partager
+                        </Button>
+
+                        <Button
+                            size="sm"
+                            className="gap-2 rounded-xl"
+                            onClick={handleDownload}
+                            disabled={!payload || isGenerating}
+                        >
+                            <FileDown className="w-3.5 h-3.5" />
+                            Télécharger
+                        </Button>
                     </div>
-                    <h2 className="text-sm font-bold text-[var(--elan-ink)] uppercase tracking-wider">
-                        Sessions & Comptes Rendus
-                    </h2>
                 </div>
-                {isLoadingSessions ? (
-                    <div className="flex items-center justify-center py-12 rounded-2xl border border-[var(--elan-line)] bg-[var(--elan-surface)]">
-                        <Loader2 className="w-8 h-8 animate-spin text-[#ff9e1b]" />
+
+                {/* Generation banner — the figures below are already live */}
+                {isGenerating && (
+                    <div className="flex items-center gap-2.5 rounded-xl border border-[rgba(40,144,248,0.25)] bg-[rgba(40,144,248,0.06)] px-4 py-3 text-sm text-[var(--elan-amber-deep)]">
+                        <Sparkles className="w-4 h-4 shrink-0 animate-pulse" />
+                        <span>
+                            Rédaction de votre analyse en cours — vos chiffres sont déjà à jour ci-dessous.
+                        </span>
                     </div>
-                ) : sessions.length === 0 ? (
-                    <div className="text-center py-12 rounded-2xl border border-[var(--elan-line)] bg-[var(--elan-surface)]">
-                        <Mic className="w-12 h-12 text-[#899892] mx-auto mb-3" />
-                        <p className="text-sm text-[var(--elan-slate)]">Aucune session pour le moment. Elles apparaîtront ici lorsque votre équipe en ajoutera.</p>
+                )}
+
+                {error && !payload && (
+                    <div className="rounded-2xl border border-[var(--elan-line)] bg-[var(--elan-surface)] p-6 text-center">
+                        <p className="text-sm text-[var(--elan-ink)] font-medium">
+                            Impossible de charger votre rapport
+                        </p>
+                        <p className="text-sm text-[var(--elan-slate)] mt-1">{error}</p>
                     </div>
-                ) : (
-                    <div className="space-y-3">
-                        {sessions.map((session) => {
-                            const isExpanded = expandedSessionId === session.id;
-                            const openTasks = session.tasks.filter((t) => !t.doneAt);
-                            const typeKey = session.type as SessionType;
-                            const typeColor = SESSION_TYPE_COLORS[typeKey] ?? SESSION_TYPE_COLORS["Autre"];
-                            return (
-                                <div
-                                    key={session.id}
-                                    className="premium-card overflow-hidden border border-[var(--elan-line)] hover:border-indigo-200/60 transition-all duration-200"
-                                >
-                                    <button
-                                        type="button"
-                                        onClick={() => setExpandedSessionId(isExpanded ? null : session.id)}
-                                        className="w-full px-5 py-4 flex items-center justify-between hover:bg-[var(--elan-paper)]/50 transition-colors text-left"
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <Badge className={cn("text-xs border shrink-0", typeColor)}>
-                                                {session.type}
-                                            </Badge>
-                                            <div>
-                                                <p className="font-semibold text-[var(--elan-ink)] text-sm">
-                                                    Session du {new Date(session.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
-                                                </p>
-                                                {session.crMarkdown && (
-                                                    <p className="text-xs text-[var(--elan-slate)] mt-0.5 line-clamp-1">
-                                                        {session.crMarkdown.split("\n").find((l) => l && !l.startsWith("#"))?.slice(0, 100)}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-3 shrink-0 ml-4">
-                                            {session.recordingUrl && (
-                                                <a
-                                                    href={session.recordingUrl}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    onClick={(e) => e.stopPropagation()}
-                                                    className="flex items-center gap-1 text-xs text-[var(--elan-amber-deep)] hover:underline font-medium"
-                                                >
-                                                    <Mic className="w-3.5 h-3.5" /> Enregistrement
-                                                </a>
-                                            )}
-                                            {openTasks.length > 0 && (
-                                                <Badge className="text-xs bg-amber-100 text-amber-700 border-amber-200">
-                                                    {openTasks.length} tâche{openTasks.length > 1 ? "s" : ""}
-                                                </Badge>
-                                            )}
-                                            {isExpanded ? <ChevronUp className="w-4 h-4 text-[var(--elan-slate)]" /> : <ChevronDown className="w-4 h-4 text-[var(--elan-slate)]" />}
-                                        </div>
-                                    </button>
-                                    {isExpanded && (
-                                        <div className="border-t border-[var(--elan-line)]">
-                                            <div className="flex gap-0 border-b border-[var(--elan-line)]">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowCRTab("cr")}
-                                                    className={cn(
-                                                        "px-5 py-3 text-sm font-semibold border-b-2 transition-colors",
-                                                        showCRTab === "cr" ? "border-[var(--elan-amber-deep)] text-[var(--elan-amber-deep)]" : "border-transparent text-[var(--elan-slate)] hover:text-[var(--elan-ink)]"
-                                                    )}
-                                                >
-                                                    Compte rendu
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowCRTab("email")}
-                                                    className={cn(
-                                                        "px-5 py-3 text-sm font-semibold border-b-2 transition-colors",
-                                                        showCRTab === "email" ? "border-[var(--elan-amber-deep)] text-[var(--elan-amber-deep)]" : "border-transparent text-[var(--elan-slate)] hover:text-[var(--elan-ink)]"
-                                                    )}
-                                                >
-                                                    Mail de synthèse
-                                                </button>
-                                            </div>
-                                            <div className="p-5">
-                                                {showCRTab === "cr" &&
-                                                    (session.crMarkdown ? (
-                                                        <div className="prose prose-sm prose-slate max-w-none">
-                                                            <pre className="whitespace-pre-wrap text-sm text-[var(--elan-ink)] font-sans leading-relaxed">
-                                                                {session.crMarkdown}
-                                                            </pre>
-                                                        </div>
-                                                    ) : (
-                                                        <p className="text-sm text-[var(--elan-slate)] italic">Pas de CR disponible.</p>
-                                                    ))}
-                                                {showCRTab === "email" &&
-                                                    (session.summaryEmail ? (
-                                                        <div className="space-y-3">
-                                                            <div className="bg-[var(--elan-paper)] border border-[var(--elan-line)] rounded-xl p-4">
-                                                                <pre className="whitespace-pre-wrap text-sm text-[var(--elan-ink)] font-sans leading-relaxed">
-                                                                    {session.summaryEmail}
-                                                                </pre>
-                                                            </div>
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                className="gap-2 rounded-xl border-[var(--elan-line)] hover:border-[rgba(255,158,27,0.3)] hover:text-[var(--elan-petrol)]"
-                                                                onClick={() => {
-                                                                    navigator.clipboard.writeText(session.summaryEmail!);
-                                                                    toast.success("Copié", "Mail copié dans le presse-papier");
-                                                                }}
-                                                            >
-                                                                <Copy className="w-3.5 h-3.5" />
-                                                                Copier le mail
-                                                            </Button>
-                                                        </div>
-                                                    ) : (
-                                                        <p className="text-sm text-[var(--elan-slate)] italic">Pas de mail de synthèse disponible.</p>
-                                                    ))}
-                                                {session.tasks.length > 0 && (
-                                                    <div className="mt-5 pt-5 border-t border-[var(--elan-line)]">
-                                                        <h4 className="text-xs font-bold text-[var(--elan-slate)] uppercase tracking-wider mb-3">Tâches d&apos;équipe</h4>
-                                                        <div className="space-y-2">
-                                                            {session.tasks.map((task) => {
-                                                                const roleBadge = ROLE_BADGE[task.assigneeRole || "ALWAYS"] ?? ROLE_BADGE.ALWAYS;
-                                                                const priorityInfo = PRIORITY_INDICATOR[task.priority || "MEDIUM"] ?? PRIORITY_INDICATOR.MEDIUM;
-                                                                return (
-                                                                    <div key={task.id} className="flex items-center gap-3">
-                                                                        <div
-                                                                            className={cn(
-                                                                                "w-4 h-4 rounded-full border-2 shrink-0",
-                                                                                task.doneAt ? "bg-emerald-500 border-emerald-500" : "border-[#899892]"
-                                                                            )}
-                                                                        />
-                                                                        <span className={cn("text-sm flex-1", task.doneAt ? "line-through text-[var(--elan-slate)]" : "text-[var(--elan-ink)]")}>
-                                                                            {task.label}
-                                                                        </span>
-                                                                        <span
-                                                                            className="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                                                                            style={{ color: roleBadge.color, background: roleBadge.bg }}
-                                                                        >
-                                                                            {roleBadge.label}
-                                                                        </span>
-                                                                        <span className="text-[10px] font-medium" style={{ color: priorityInfo.color }}>
-                                                                            {priorityInfo.label}
-                                                                        </span>
-                                                                        {task.assignee && <span className="text-xs text-[var(--elan-slate)]">— {task.assignee}</span>}
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
+                )}
+
+                {payload && (
+                    <div className="animate-fade-up" style={{ animationDelay: "40ms" }}>
+                        <ReportDocument payload={payload} isGenerating={isGenerating} />
                     </div>
                 )}
             </div>
-
-            {/* Cumulative Timeline */}
-            {data.length > 0 && (
-                <div className="premium-card overflow-hidden animate-fade-up" style={{ animationDelay: "80ms" }}>
-                    {/* Gradient header */}
-                    <div
-                        className="px-6 py-5 flex items-center justify-between"
-                        style={{ background: "#0C3B38" }}
-                    >
-                        <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-lg bg-[var(--elan-surface)]/15 flex items-center justify-center">
-                                <TrendingUp className="w-4.5 h-4.5 text-white" />
-                            </div>
-                            <div>
-                                <h2 className="text-sm font-bold text-white uppercase tracking-wider">
-                                    Depuis le lancement
-                                </h2>
-                                <p className="text-xs text-indigo-200/70 mt-0.5">{data.length} mois d&apos;activite</p>
-                            </div>
-                        </div>
-                        <div className="text-right">
-                            <span className="text-3xl font-black text-white tabular-nums">
-                                <AnimatedNumber value={totalMeetings} />
-                            </span>
-                            <p className="text-xs text-indigo-200/70">RDV total</p>
-                        </div>
-                    </div>
-
-                    <div className="p-6 space-y-3">
-                        {data.map((entry) => {
-                            const isCurrent = entry.month === now.getMonth() + 1 && entry.year === now.getFullYear();
-                            return (
-                                <div
-                                    key={`${entry.year}-${entry.month}`}
-                                    className={cn(
-                                        "flex items-center gap-4 p-3 rounded-xl transition-all duration-300",
-                                        isCurrent
-                                            ? "bg-gradient-to-r from-[#dbe4df] to-[#f4f0e8] border border-[rgba(12,59,56,0.16)] shadow-sm"
-                                            : "hover:bg-[#f4f0e8] border border-transparent"
-                                    )}
-                                >
-                                    <span className={cn(
-                                        "text-sm font-semibold w-24 flex-shrink-0",
-                                        isCurrent ? "text-[#0c3b38]" : "text-[var(--elan-ink)]"
-                                    )}>
-                                        {MONTH_NAMES[entry.month]} {entry.year}
-                                    </span>
-                                    <div className="flex-1">
-                                        <ProgressBar value={entry.meetingsBooked} max={maxMeetings} height="sm" />
-                                    </div>
-                                    <span className="text-sm font-bold text-[var(--elan-ink)] tabular-nums w-16 text-right">
-                                        <AnimatedNumber value={entry.meetingsBooked} /> RDV
-                                    </span>
-                                    {isCurrent && (
-                                        <span className="text-[10px] font-bold text-[#15201E] bg-[#FF9E1B] border border-[#E07C00] px-2.5 py-1 rounded-full shadow-sm">
-                                            en cours
-                                        </span>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-
-            {/* Monthly Report Cards */}
-            {data.length > 0 && (
-                <div>
-                    <div className="flex items-center gap-2.5 mb-5">
-                        <div className="w-8 h-8 rounded-lg bg-[#FF9E1B] flex items-center justify-center shadow-sm">
-                            <BarChart3 className="w-4 h-4 text-[#15201E]" />
-                        </div>
-                        <h2 className="text-sm font-bold text-[var(--elan-ink)] uppercase tracking-wider">
-                            Rapports mensuels
-                        </h2>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 stagger-children">
-                        {[...data].reverse().map((entry) => {
-                            const key = `${entry.year}-${entry.month}`;
-                            const isCurrent = entry.month === now.getMonth() + 1 && entry.year === now.getFullYear();
-                            const metObjective = entry.meetingsBooked >= entry.objective;
-                            const contactRate = entry.callsMade > 0
-                                ? Math.round((entry.contactsReached / entry.callsMade) * 100)
-                                : 0;
-                            const pct = entry.objective > 0 ? Math.round((entry.meetingsBooked / entry.objective) * 100) : 0;
-
-                            return (
-                                <div key={key} className="premium-card overflow-hidden">
-                                    {/* Card accent top bar */}
-                                    <div className={cn(
-                                        "h-1",
-                                        metObjective
-                                            ? "bg-gradient-to-r from-emerald-400 to-teal-400"
-                                            : isCurrent
-                                            ? "bg-gradient-to-r from-amber-400 to-orange-400"
-                                            : "bg-gradient-to-r from-[#ff9e1b] to-[#e07c00]"
-                                    )} />
-
-                                    <div className="p-6">
-                                        <div className="flex items-center justify-between mb-4">
-                                            <h3 className="text-lg font-bold text-[var(--elan-ink)]">
-                                                {MONTH_NAMES[entry.month]} {entry.year}
-                                            </h3>
-                                            {isCurrent ? (
-                                                <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200/60">
-                                                    En cours
-                                                </span>
-                                            ) : metObjective ? (
-                                                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200/60 flex items-center gap-1">
-                                                    <Check className="w-3 h-3" /> Atteint
-                                                </span>
-                                            ) : null}
-                                        </div>
-
-                                        <div className="space-y-3 mb-5">
-                                            <div className="flex items-end gap-2">
-                                                <span className="text-4xl font-black gradient-text tabular-nums">
-                                                    {entry.meetingsBooked}
-                                                </span>
-                                                <span className="text-sm text-[var(--elan-slate)] mb-1.5 font-medium">
-                                                    RDV {!isCurrent && entry.objective > 0 && `(${pct}%)`}
-                                                </span>
-                                            </div>
-                                            {entry.objective > 0 && (
-                                                <ProgressBar value={entry.meetingsBooked} max={entry.objective} height="sm" />
-                                            )}
-                                            <div className="flex items-center gap-3 text-sm text-[var(--elan-slate)]">
-                                                <span className="flex items-center gap-1">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />
-                                                    {entry.callsMade} appels
-                                                </span>
-                                                <span className="flex items-center gap-1">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-                                                    {contactRate}% contact
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-2 pt-4 border-t border-[var(--elan-line)]">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="gap-1.5 rounded-xl text-xs flex-1 hover:border-[rgba(255,158,27,0.3)] hover:text-[var(--elan-petrol)] transition-all"
-                                                onClick={() => handlePdf(entry)}
-                                                disabled={generatingPdf === key}
-                                            >
-                                                {generatingPdf === key ? (
-                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                                ) : (
-                                                    <FileDown className="w-3.5 h-3.5" />
-                                                )}
-                                                PDF
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="gap-1.5 rounded-xl text-xs flex-1 hover:border-[rgba(255,158,27,0.3)] hover:text-[var(--elan-petrol)] transition-all"
-                                                onClick={() => handleShare(entry)}
-                                                disabled={sharingMonth === key}
-                                            >
-                                                {sharingMonth === key ? (
-                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                                ) : (
-                                                    <Share2 className="w-3.5 h-3.5" />
-                                                )}
-                                                Partager
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-
-            {/* Empty state */}
-            {data.length === 0 && !isLoading && (
-                <div className="text-center py-16 bg-[var(--elan-surface)] rounded-2xl border border-[var(--elan-line)] shadow-sm">
-                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[var(--elan-paper)] to-[var(--elan-paper-2)] flex items-center justify-center mx-auto mb-4">
-                        <Calendar className="w-7 h-7 text-[#899892]" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-[var(--elan-ink)] mb-1">Aucun rapport disponible</h3>
-                    <p className="text-sm text-[var(--elan-slate)] max-w-sm mx-auto">
-                        Les rapports mensuels apparaitront ici une fois votre mission lancee.
-                    </p>
-                </div>
-            )}
         </div>
     );
 }

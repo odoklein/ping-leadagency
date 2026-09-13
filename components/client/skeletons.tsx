@@ -103,35 +103,32 @@ export function ResultsSkeleton() {
     );
 }
 
+/** Mirrors the shape of the daily report document: hero, KPI row, narrative. */
 export function ReportingSkeleton() {
     return (
-        <div className="min-h-full bg-[#F4F6F9] p-4 md:p-6 space-y-8">
-            <div className="space-y-2">
-                <Skeleton className="h-8 w-36" />
-                <Skeleton className="h-4 w-64" />
+        <div className="min-h-full bg-[var(--elan-paper)] p-4 md:p-6 space-y-8">
+            <div className="flex items-end justify-between gap-4">
+                <div className="space-y-2">
+                    <Skeleton className="h-8 w-36" />
+                    <Skeleton className="h-4 w-64" />
+                </div>
+                <Skeleton className="h-9 w-44 rounded-xl" />
             </div>
-            <div className="bg-white rounded-2xl border border-[#E8EBF0] p-6 space-y-4">
-                <Skeleton className="h-5 w-44" />
-                {[1, 2, 3, 4, 5].map((i) => (
-                    <div key={i} className="flex items-center gap-4">
-                        <Skeleton className="h-4 w-20" />
-                        <Skeleton className="h-3 flex-1 rounded-full" />
-                        <Skeleton className="h-4 w-12" />
-                    </div>
+            <Skeleton className="h-40 w-full rounded-2xl" />
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+                {[1, 2, 3, 4].map((i) => (
+                    <Skeleton key={i} className="h-28 w-full rounded-2xl" />
                 ))}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {[1, 2, 3].map((i) => (
-                    <div key={i} className="bg-white rounded-2xl border border-[#E8EBF0] p-6 space-y-4">
-                        <Skeleton className="h-5 w-32" />
-                        <Skeleton className="h-8 w-16" />
-                        <Skeleton className="h-4 w-24" />
-                        <div className="flex gap-2">
-                            <Skeleton className="h-8 w-20 rounded-lg" />
-                            <Skeleton className="h-8 w-20 rounded-lg" />
-                        </div>
-                    </div>
+            <div className="rounded-2xl border border-[var(--elan-line)] bg-[var(--elan-surface)] p-6 space-y-3">
+                <Skeleton className="h-4 w-28" />
+                {[1, 2, 3, 4].map((i) => (
+                    <Skeleton key={i} className="h-3 w-full rounded-full" />
                 ))}
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <Skeleton className="h-64 w-full rounded-2xl" />
+                <Skeleton className="h-64 w-full rounded-2xl" />
             </div>
         </div>
     );
