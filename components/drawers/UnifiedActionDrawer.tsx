@@ -960,6 +960,15 @@ export function UnifiedActionDrawer({
         return company?.name || "Sans nom";
     }, [contact, company]);
 
+    /** Role + company, minus whatever the heading above it already says. */
+    const subtitle = useMemo(() => {
+        const parts: string[] = [];
+        if (contact?.title) parts.push(contact.title);
+        if (company?.name && company.name !== displayName) parts.push(company.name);
+        if (parts.length === 0 && !company?.name) parts.push("Société non renseignée");
+        return parts.join(" · ");
+    }, [contact, company, displayName]);
+
     const hasPriorCall = useMemo(
         () => actions.some((a) => a.channel === "CALL"),
         [actions]
@@ -1335,57 +1344,10 @@ export function UnifiedActionDrawer({
             title={displayName}
             description={missionName ? `Mission : ${missionName}` : undefined}
             size="lg"
-            className="unified-action-drawer uad-shell bg-white"
-            overlayClassName="uad-scrim"
-            contentClassName="!p-4 !bg-white"
+            quarterWidth
+            className="unified-action-drawer bg-white"
+            contentClassName="@container !p-4 !bg-white"
         >
-            <style>{`
-                @keyframes uadSectionIn {
-                    from { opacity: 0; transform: translateY(6px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-                @keyframes uadPulse {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: 0.5; }
-                }
-                .unified-action-drawer [class~="text-indigo-500"],
-                .unified-action-drawer [class~="text-indigo-600"],
-                .unified-action-drawer [class~="text-indigo-700"],
-                .unified-action-drawer [class~="text-violet-600"],
-                .unified-action-drawer [class~="text-violet-700"],
-                .unified-action-drawer [class~="text-blue-600"],
-                .unified-action-drawer [class~="text-blue-700"] { color: #0c3b38 !important; }
-                .unified-action-drawer [class~="bg-indigo-50"],
-                .unified-action-drawer [class~="bg-indigo-100"],
-                .unified-action-drawer [class~="bg-violet-50"],
-                .unified-action-drawer [class~="bg-violet-100"],
-                .unified-action-drawer [class~="bg-blue-50"] { background-color: #eef5f3 !important; }
-                .unified-action-drawer [class~="bg-slate-50"],
-                .unified-action-drawer [class~="bg-slate-50/30"],
-                .unified-action-drawer [class~="bg-slate-50/40"],
-                .unified-action-drawer [class~="bg-slate-50/50"],
-                .unified-action-drawer [class~="bg-slate-50/60"],
-                .unified-action-drawer [class~="bg-slate-50/80"] { background-color: #f7f9f8 !important; }
-                .unified-action-drawer [class~="bg-slate-100"] { background-color: #eef2f0 !important; }
-                .unified-action-drawer [class~="bg-indigo-600"],
-                .unified-action-drawer [class~="bg-indigo-700"],
-                .unified-action-drawer [class~="bg-violet-600"],
-                .unified-action-drawer [class~="bg-violet-700"] { background-color: #0c3b38 !important; }
-                .unified-action-drawer [class*="border-indigo-"],
-                .unified-action-drawer [class*="border-violet-"] { border-color: #d6e2de !important; }
-                .unified-action-drawer [class*="ring-indigo-"],
-                .unified-action-drawer [class*="ring-violet-"] { --tw-ring-color: rgba(12, 59, 56, 0.24) !important; }
-                .unified-action-drawer [class~="from-indigo-400"],
-                .unified-action-drawer [class~="from-indigo-500"],
-                .unified-action-drawer [class~="from-violet-400"],
-                .unified-action-drawer [class~="from-violet-500"] { --tw-gradient-from: #0c3b38 var(--tw-gradient-from-position) !important; }
-                .unified-action-drawer [class~="to-indigo-600"],
-                .unified-action-drawer [class~="to-violet-600"] { --tw-gradient-to: #114b46 var(--tw-gradient-to-position) !important; }
-                .unified-action-drawer :where(input, select, textarea):focus {
-                    border-color: #0c3b38 !important;
-                    box-shadow: 0 0 0 3px rgba(12, 59, 56, 0.12) !important;
-                }
-            `}</style>
             {loading ? (
                 <div className="space-y-5 p-1" role="status" aria-label="Chargement des données">
                     <div className="flex gap-3">
@@ -1432,18 +1394,18 @@ export function UnifiedActionDrawer({
                                         <h2 className="truncate text-[18px] font-semibold tracking-[-0.025em] text-[#15201e]">{displayName}</h2>
                                         <StatusPill status={contact?.status ?? company?.status ?? ""} />
                                     </div>
-                                    <p className="mt-0.5 truncate text-xs text-slate-500">
-                                        {contact?.title ? `${contact.title} · ` : ""}{company?.name ?? "Société non renseignée"}
-                                    </p>
-                                    {missionName && <p className="mt-1 text-[11px] font-medium text-[#637875]">Mission · {missionName}</p>}
+                                    {/* Only the parts that add something: when the contact has no name the
+                                        heading already *is* the company name, and the mission is in the
+                                        drawer header — repeating either just eats vertical space. */}
+                                    {subtitle && <p className="mt-0.5 truncate text-xs text-slate-500">{subtitle}</p>}
                                 </div>
                             </div>
 
-                            <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+                            <div className="mt-4 flex flex-wrap gap-2">
                                 {(contact?.phone || company?.phone) && (
                                     <a
                                         href={`tel:${contact?.phone || company?.phone}`}
-                                        className="inline-flex h-9 shrink-0 items-center gap-2 rounded-[10px] bg-[#0c3b38] px-3 text-xs font-semibold text-white shadow-sm transition-transform active:scale-[0.98]"
+                                        className="inline-flex h-9 min-w-0 flex-auto shrink-0 items-center justify-center gap-2 rounded-[10px] bg-[#0c3b38] px-3 text-xs font-semibold text-white shadow-sm transition-transform active:scale-[0.98]"
                                     >
                                         <PhoneCall className="h-3.5 w-3.5" /> Appeler
                                     </a>
@@ -1452,7 +1414,7 @@ export function UnifiedActionDrawer({
                                     <button
                                         type="button"
                                         onClick={() => setNewActionResult("ENVOIE_MAIL")}
-                                        className="inline-flex h-9 shrink-0 items-center gap-2 rounded-[10px] border border-[#d7e3df] bg-white px-3 text-xs font-semibold text-[#1f4d47] hover:bg-[#eef4f2] active:scale-[0.98]"
+                                        className="inline-flex h-9 min-w-0 flex-auto shrink-0 items-center justify-center gap-2 rounded-[10px] border border-[#d7e3df] bg-white px-3 text-xs font-semibold text-[#1f4d47] hover:bg-[#eef4f2] active:scale-[0.98]"
                                     >
                                         <Mail className="h-3.5 w-3.5" /> Envoyer un email
                                     </button>
@@ -1462,7 +1424,7 @@ export function UnifiedActionDrawer({
                                         href={contact.linkedin}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="inline-flex h-9 shrink-0 items-center gap-2 rounded-[10px] border border-[#d7e3df] bg-white px-3 text-xs font-semibold text-[#1f4d47] hover:bg-[#eef4f2] active:scale-[0.98]"
+                                        className="inline-flex h-9 min-w-0 flex-auto shrink-0 items-center justify-center gap-2 rounded-[10px] border border-[#d7e3df] bg-white px-3 text-xs font-semibold text-[#1f4d47] hover:bg-[#eef4f2] active:scale-[0.98]"
                                     >
                                         <Linkedin className="h-3.5 w-3.5" /> LinkedIn
                                     </a>
@@ -1471,7 +1433,7 @@ export function UnifiedActionDrawer({
                                     <button
                                         type="button"
                                         onClick={() => setShowBookingDrawer(true)}
-                                        className="inline-flex h-9 shrink-0 items-center gap-2 rounded-[10px] border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 active:scale-[0.98]"
+                                        className="inline-flex h-9 min-w-0 flex-auto shrink-0 items-center justify-center gap-2 rounded-[10px] border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 active:scale-[0.98]"
                                     >
                                         <Calendar className="h-3.5 w-3.5" /> Planifier un RDV
                                     </button>
@@ -1479,7 +1441,7 @@ export function UnifiedActionDrawer({
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 border-t border-[#e5ebe8] md:grid-cols-4">
+                        <div className="grid grid-cols-2 border-t border-[#e5ebe8] @md:grid-cols-4">
                             {[
                                 {
                                     label: "Dernière action",
@@ -1504,7 +1466,7 @@ export function UnifiedActionDrawer({
                                     tone: "text-[#1f4d47]",
                                 },
                             ].map((item) => (
-                                <div key={item.label} className="border-b border-r border-[#edf1ef] px-3 py-2.5 last:border-r-0 md:border-b-0">
+                                <div key={item.label} className="border-b border-r border-[#edf1ef] px-3 py-2.5 last:border-r-0 @md:border-b-0">
                                     <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-400">{item.label}</p>
                                     <p className={cn("mt-1 truncate text-[11px] font-semibold", item.tone)}>{item.value}</p>
                                 </div>
@@ -2122,7 +2084,7 @@ export function UnifiedActionDrawer({
                         >
                             {/* No contact prompt */}
                             {!contact && (
-                                <div className="mx-4 mt-4 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+                                <div className="mx-4 mt-4 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 p-4 flex flex-col @sm:flex-row items-center justify-between gap-3">
                                     <div className="flex items-center gap-3">
                                         <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0">
                                             <User className="w-4 h-4 text-indigo-600" aria-hidden="true" />
@@ -3204,7 +3166,7 @@ export function UnifiedActionDrawer({
                                                     </p>
                                                 </div>
                                             </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                            <div className="grid grid-cols-1 @sm:grid-cols-2 gap-2.5">
                                                 <input
                                                     value={newInterlocutorContact.firstName}
                                                     onChange={(e) => {
@@ -3371,7 +3333,7 @@ export function UnifiedActionDrawer({
                                     )}
 
                                     {newActionResult !== "ENVOIE_MAIL" && (
-                                    <div className="sticky -bottom-4 z-10 -mx-4 flex flex-col gap-2 border-t border-[#dfe7e3] bg-white/95 px-4 pb-1 pt-3 shadow-[0_-12px_28px_-24px_rgba(12,59,56,0.45)] backdrop-blur sm:flex-row">
+                                    <div className="sticky -bottom-4 z-10 -mx-4 flex flex-col gap-2 border-t border-[#dfe7e3] bg-white/95 px-4 pb-1 pt-3 shadow-[0_-12px_28px_-24px_rgba(12,59,56,0.45)] backdrop-blur @sm:flex-row">
                                         <Button
                                             type="button"
                                             variant="primary"

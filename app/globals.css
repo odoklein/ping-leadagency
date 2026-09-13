@@ -5462,70 +5462,165 @@ textarea::placeholder {
 }
 
 /* ============================================
-   UNIFIED ACTION DRAWER SHELL (components/drawers/UnifiedActionDrawer.tsx)
-   Mirrors the assistant panel's backdrop + floating-shell feel: the page stays
-   visible but dimmed behind a soft scrim, and the drawer floats inset from the
-   viewport edges instead of being welded to them.
-   Scoped to .unified-action-drawer so no other Drawer consumer is affected.
+   FLOATING DRAWER SHELL (.pg-drawer)
+   The default look for every <Drawer>: the page stays visible but dimmed behind a
+   soft scrim, and the panel floats inset from the viewport edges instead of being
+   welded to them. Mirrors the assistant panel so the two read as one system.
+
+   Width is NOT set here — it still comes from each drawer's `size` prop (the
+   Tailwind max-w-* class). This only caps width to the viewport minus the inset.
+   Add .pg-drawer-quarter for the quarter-width variant used by the paired SDR
+   drawers, which sit side by side over the list.
+
+   Motion budget: transform + opacity only (compositor-only properties), no
+   backdrop blur on desktop, and `contain` so drawer-internal updates never
+   reflow or repaint the page behind.
    ============================================ */
 
-.uad-scrim.uad-scrim {
+.pg-drawer-scrim.pg-drawer-scrim {
     background: rgba(12, 20, 40, 0.28);
     backdrop-filter: blur(2px);
+    animation-duration: 140ms;
 }
 
-.unified-action-drawer.uad-shell {
-    inset: 0;
-    width: 100%;
-    max-width: none;
-    border: 0;
-    border-radius: 0;
+.pg-drawer.pg-drawer {
     overflow: hidden;
     box-shadow: none;
-    animation: uadSheetUp 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    contain: layout paint style;
+    will-change: transform, opacity;
 }
 
-.unified-action-drawer.uad-shell.is-closing {
-    animation: uadSheetUp 170ms cubic-bezier(0.4, 0, 1, 1) reverse both;
+/* Under 640px a side panel is unusable: become a full-screen sheet that slides up. */
+@media (max-width: 639px) {
+    .pg-drawer.pg-drawer {
+        inset: 0;
+        width: 100%;
+        max-width: none;
+        border: 0;
+        border-radius: 0;
+        animation: pgDrawerSheetUp 170ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    .pg-drawer.pg-drawer.is-closing {
+        animation: pgDrawerSheetUp 130ms cubic-bezier(0.4, 0, 1, 1) reverse both;
+    }
 }
 
+/* Desktop: floating panel, inset 12px from the edges like the assistant panel. */
 @media (min-width: 640px) {
-    .uad-scrim.uad-scrim {
+    .pg-drawer-scrim.pg-drawer-scrim {
         background: rgba(12, 20, 40, 0.14);
         backdrop-filter: none;
     }
 
-    .unified-action-drawer.uad-shell {
-        inset: 12px 12px 12px auto;
-        width: min(680px, calc(100vw - 24px));
-        max-width: none;
+    .pg-drawer.pg-drawer {
+        top: 12px;
+        bottom: 12px;
+        inset-inline: auto;
+        /* Fills the viewport minus the inset; the drawer's own max-w-* caps it. */
+        width: calc(100vw - 24px);
         border: 1px solid #dfe7e3;
         border-radius: 22px;
         box-shadow:
             0 24px 60px rgba(12, 32, 64, 0.16),
             0 2px 8px rgba(12, 32, 64, 0.06);
-        animation: uadSlideIn 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
     }
 
-    .unified-action-drawer.uad-shell.is-closing {
-        animation: uadSlideIn 170ms cubic-bezier(0.4, 0, 1, 1) reverse both;
+    .pg-drawer.pg-drawer-right {
+        right: 12px;
+        animation: pgDrawerInRight 170ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    .pg-drawer.pg-drawer-right.is-closing {
+        animation: pgDrawerInRight 130ms cubic-bezier(0.4, 0, 1, 1) reverse both;
+    }
+
+    .pg-drawer.pg-drawer-left {
+        left: 12px;
+        animation: pgDrawerInLeft 170ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    .pg-drawer.pg-drawer-left.is-closing {
+        animation: pgDrawerInLeft 130ms cubic-bezier(0.4, 0, 1, 1) reverse both;
+    }
+
+    /* Quarter-width variant: two of these sit side by side over a half-visible page.
+       The floor keeps the content usable on smaller laptops. */
+    .pg-drawer.pg-drawer-quarter {
+        width: max(min(25vw, calc(100vw - 24px)), min(380px, calc(100vw - 24px)));
+        max-width: calc(100vw - 24px);
     }
 }
 
-@media (min-width: 1280px) {
-    .unified-action-drawer.uad-shell { width: min(760px, calc(100vw - 24px)); }
-}
-
-@keyframes uadSlideIn {
+@keyframes pgDrawerInRight {
     from { opacity: 0; transform: translate3d(16px, 0, 0); }
     to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 
-@keyframes uadSheetUp {
+@keyframes pgDrawerInLeft {
+    from { opacity: 0; transform: translate3d(-16px, 0, 0); }
+    to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes pgDrawerSheetUp {
     from { opacity: 0; transform: translate3d(0, 24px, 0); }
     to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .unified-action-drawer.uad-shell { animation: none !important; }
+    .pg-drawer.pg-drawer,
+    .pg-drawer-scrim.pg-drawer-scrim { animation: none !important; }
+}
+
+/* ============================================
+   UNIFIED ACTION DRAWER THEME OVERRIDES
+   Repaints the drawer's stock indigo/violet/slate utilities into the petrol
+   palette. Lives here rather than in an inline <style> inside the component so
+   the browser parses these attribute selectors once instead of on every mount.
+   ============================================ */
+
+@keyframes uadSectionIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes uadPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+.unified-action-drawer [class~="text-indigo-500"],
+.unified-action-drawer [class~="text-indigo-600"],
+.unified-action-drawer [class~="text-indigo-700"],
+.unified-action-drawer [class~="text-violet-600"],
+.unified-action-drawer [class~="text-violet-700"],
+.unified-action-drawer [class~="text-blue-600"],
+.unified-action-drawer [class~="text-blue-700"] { color: #0c3b38 !important; }
+.unified-action-drawer [class~="bg-indigo-50"],
+.unified-action-drawer [class~="bg-indigo-100"],
+.unified-action-drawer [class~="bg-violet-50"],
+.unified-action-drawer [class~="bg-violet-100"],
+.unified-action-drawer [class~="bg-blue-50"] { background-color: #eef5f3 !important; }
+.unified-action-drawer [class~="bg-slate-50"],
+.unified-action-drawer [class~="bg-slate-50/30"],
+.unified-action-drawer [class~="bg-slate-50/40"],
+.unified-action-drawer [class~="bg-slate-50/50"],
+.unified-action-drawer [class~="bg-slate-50/60"],
+.unified-action-drawer [class~="bg-slate-50/80"] { background-color: #f7f9f8 !important; }
+.unified-action-drawer [class~="bg-slate-100"] { background-color: #eef2f0 !important; }
+.unified-action-drawer [class~="bg-indigo-600"],
+.unified-action-drawer [class~="bg-indigo-700"],
+.unified-action-drawer [class~="bg-violet-600"],
+.unified-action-drawer [class~="bg-violet-700"] { background-color: #0c3b38 !important; }
+.unified-action-drawer [class*="border-indigo-"],
+.unified-action-drawer [class*="border-violet-"] { border-color: #d6e2de !important; }
+.unified-action-drawer [class*="ring-indigo-"],
+.unified-action-drawer [class*="ring-violet-"] { --tw-ring-color: rgba(12, 59, 56, 0.24) !important; }
+.unified-action-drawer [class~="from-indigo-400"],
+.unified-action-drawer [class~="from-indigo-500"],
+.unified-action-drawer [class~="from-violet-400"],
+.unified-action-drawer [class~="from-violet-500"] { --tw-gradient-from: #0c3b38 var(--tw-gradient-from-position) !important; }
+.unified-action-drawer [class~="to-indigo-600"],
+.unified-action-drawer [class~="to-violet-600"] { --tw-gradient-to: #114b46 var(--tw-gradient-to-position) !important; }
+.unified-action-drawer :where(input, select, textarea):focus {
+    border-color: #0c3b38 !important;
+    box-shadow: 0 0 0 3px rgba(12, 59, 56, 0.12) !important;
 }

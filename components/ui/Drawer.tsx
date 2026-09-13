@@ -24,6 +24,8 @@ interface DrawerProps {
     contentClassName?: string;
     /** Extra classes for the overlay/scrim behind the panel. */
     overlayClassName?: string;
+    /** Cap the panel at a quarter of the viewport, so two can sit side by side. */
+    quarterWidth?: boolean;
     footer?: React.ReactNode;
     /** Helper link shown above footer (e.g. "Learn more about...") */
     footerHelperLink?: { href: string; label: string };
@@ -41,8 +43,9 @@ const SIZES = {
     full: "max-w-[95vw]",
 };
 
-// Keep in sync with .animate-slide-out-* / .animate-fade-out in globals.css — the panel
-// stays mounted for this long after isOpen flips to false so the exit animation can play.
+// Must stay >= the longest exit animation on .pg-drawer / .pg-drawer-scrim in
+// globals.css — the panel stays mounted this long after isOpen flips to false so
+// the exit animation can play out.
 const EXIT_ANIMATION_MS = 160;
 
 let openModalDrawerCount = 0;
@@ -78,6 +81,7 @@ export function Drawer({
     className,
     contentClassName,
     overlayClassName,
+    quarterWidth = false,
     footer,
     footerHelperLink,
     headerCentered = false,
@@ -161,7 +165,7 @@ export function Drawer({
             {modal && (
                 <div
                     className={cn(
-                        "absolute inset-0 bg-black/15 backdrop-blur-[1px] cursor-pointer transition-opacity duration-300",
+                        "pg-drawer-scrim absolute inset-0 cursor-pointer",
                         isClosing ? "animate-fade-out" : "animate-fade-in",
                         overlayClassName
                     )}
@@ -178,13 +182,15 @@ export function Drawer({
                 aria-modal={modal ? "true" : undefined}
                 aria-label={title || "Panneau latéral"}
                 className={cn(
-                    "fixed top-0 bottom-0 w-full flex flex-col bg-white shadow-2xl shadow-black/10 z-[81] outline-none",
-                    side === "right"
-                        ? cn("right-0", isClosing ? "animate-slide-out-right" : "animate-slide-in-right")
-                        : cn("left-0", isClosing ? "animate-slide-out-left" : "animate-slide-in-left"),
+                    // .pg-drawer (globals.css) is the shared floating shell: inset from the
+                    // viewport edges, rounded, soft shadow, compositor-only motion. Width
+                    // still comes from SIZES below, so each drawer keeps its own `size`.
+                    "pg-drawer fixed top-0 bottom-0 w-full flex flex-col bg-white z-[81] outline-none",
+                    side === "right" ? "pg-drawer-right right-0" : "pg-drawer-left left-0",
+                    quarterWidth && "pg-drawer-quarter",
                     !modal && "pointer-events-auto",
                     SIZES[size],
-                    // State hook so a consumer's own shell CSS can drive its exit animation.
+                    // State hook that drives the shell's exit animation.
                     isClosing ? "is-closing" : "is-open",
                     className
                 )}

@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Drawer, Tabs, Button, TextSkeleton, useToast } from "@/components/ui";
+import { Check, Copy } from "lucide-react";
+import { Drawer, Tabs, Button, Select, TextSkeleton, useToast } from "@/components/ui";
+import { cn } from "@/lib/utils";
 import {
     sdrScriptCompanionCampaignsKey,
     sdrScriptCompanionDataKey,
@@ -36,6 +38,58 @@ type CompanionData = {
     defaultTab: "base" | "additional" | "ai";
 };
 
+
+function EmptyNote({ children }: { children: React.ReactNode }) {
+    return (
+        <p className="rounded-xl border border-[#dfe7e3] bg-[#f7f9f8] px-4 py-6 text-center text-sm text-slate-600">
+            {children}
+        </p>
+    );
+}
+
+/** A read-only script with a copy affordance — the SDR reads this live on a call. */
+function ScriptPane({
+    content,
+    emptyLabel,
+    meta,
+}: {
+    content: string;
+    emptyLabel: string;
+    meta?: React.ReactNode;
+}) {
+    const [copied, setCopied] = useState(false);
+
+    useEffect(() => {
+        if (!copied) return;
+        const timer = window.setTimeout(() => setCopied(false), 1600);
+        return () => window.clearTimeout(timer);
+    }, [copied]);
+
+    if (!content) return <EmptyNote>{emptyLabel}</EmptyNote>;
+
+    return (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#dfe7e3] bg-white">
+            <div className="flex items-center justify-between gap-2 border-b border-[#e7ecea] bg-[#fafcfb] px-3 py-2">
+                <div className="min-w-0">{meta}</div>
+                <button
+                    type="button"
+                    onClick={() => {
+                        void navigator.clipboard.writeText(content).then(() => setCopied(true));
+                    }}
+                    aria-label="Copier le script"
+                    className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border border-[#d7e3df] bg-white px-2 text-[11px] font-semibold text-[#1f4d47] transition-colors hover:bg-[#eef4f2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0c3b38]/20"
+                >
+                    {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copied ? "Copié" : "Copier"}
+                </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                <pre className="whitespace-pre-wrap font-sans text-[13px] leading-[1.7] text-slate-700">{content}</pre>
+            </div>
+        </div>
+    );
+}
+
 export function ScriptCompanionDrawer({
     isOpen,
     onClose,
@@ -61,7 +115,11 @@ export function ScriptCompanionDrawer({
         staleTime: 60_000,
     });
 
-    const selectedCampaign = campaigns[0] ?? null;
+    const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+    const selectedCampaign = useMemo(
+        () => campaigns.find((c) => c.id === selectedCampaignId) ?? campaigns[0] ?? null,
+        [campaigns, selectedCampaignId]
+    );
 
     const {
         data: companionData,
@@ -90,6 +148,8 @@ export function ScriptCompanionDrawer({
             setAdditionalDraft("");
         }
     }, [companionData]);
+
+    const isLoading = campaignsLoading || companionLoading;
 
     const hasUnsavedChanges = useMemo(
         () => (companionData?.additionalDraft ?? companionData?.additionalShared ?? "") !== additionalDraft,
@@ -153,20 +213,26 @@ export function ScriptCompanionDrawer({
             side="left"
             closeOnOverlay={false}
             modal={false}
+            quarterWidth
+            className="bg-white"
+            contentClassName="@container !px-4 !pt-0 !pb-0 !bg-white flex flex-col"
         >
-            <div className="space-y-4">
+            {/* Tabs stay put while a long script scrolls under them. */}
+            <div className="sticky top-0 z-10 -mx-4 bg-white/95 px-4 pb-3 pt-4 backdrop-blur">
                 <Tabs
                     variant="pills"
                     activeTab={activeTab}
                     onTabChange={(tabId) => setActiveTab(tabId as ScriptTabId)}
                     tabs={[
                         { id: "base", label: "Script de base" },
-                        { id: "additional", label: "Script additionel" },
-                        { id: "ai", label: "Script amélioré par IA" },
+                        { id: "additional", label: "Additionnel", badge: hasUnsavedChanges ? "•" : undefined },
+                        { id: "ai", label: "Amélioré par IA" },
                     ]}
                 />
+            </div>
 
-                {(campaignsLoading || companionLoading) && (
+            <div className="flex min-h-0 flex-1 flex-col gap-3 pb-4">
+                {isLoading && (
                     <div className="space-y-3">
                         <TextSkeleton lines={1} className="h-8 w-2/3" />
                         <TextSkeleton lines={6} />
@@ -174,85 +240,97 @@ export function ScriptCompanionDrawer({
                 )}
 
                 {!campaignsLoading && campaigns.length === 0 && (
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-600">
-                        Aucune campagne active disponible pour cette mission.
-                    </div>
+                    <EmptyNote>Aucune campagne active disponible pour cette mission.</EmptyNote>
                 )}
 
                 {!campaignsLoading && campaigns.length > 0 && companionData && (
-                    <div className="space-y-4">
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                            Campagne : <span className="font-semibold">{companionData.campaignName}</span>
-                        </div>
+                    <>
+                        {/* One campaign: just name it. Several: let the SDR switch. */}
+                        {campaigns.length > 1 ? (
+                            <Select
+                                label="Campagne"
+                                options={campaigns.map((c) => ({ value: c.id, label: c.name }))}
+                                value={selectedCampaign?.id}
+                                onChange={setSelectedCampaignId}
+                                searchable={campaigns.length > 6}
+                            />
+                        ) : (
+                            <p className="truncate rounded-xl border border-[#dfe7e3] bg-[#f7f9f8] px-3 py-2 text-sm text-[#1f4d47]">
+                                Campagne : <span className="font-semibold">{companionData.campaignName}</span>
+                            </p>
+                        )}
 
                         {activeTab === "base" ? (
-                            <div className="rounded-xl border border-slate-200 bg-white p-4">
-                                {companionData.baseScript ? (
-                                    <pre className="whitespace-pre-wrap text-sm leading-6 text-slate-700 font-sans">
-                                        {companionData.baseScript}
-                                    </pre>
-                                ) : (
-                                    <p className="text-sm text-slate-500">Aucun script de base configuré sur cette campagne.</p>
-                                )}
-                            </div>
+                            <ScriptPane
+                                content={companionData.baseScript}
+                                emptyLabel="Aucun script de base configuré sur cette campagne."
+                            />
                         ) : activeTab === "ai" ? (
-                            <div className="rounded-xl border border-slate-200 bg-white p-4">
-                                {companionData.aiShared ? (
-                                    <div className="space-y-3">
-                                        <div className="flex items-center justify-between gap-3">
-                                            <p className="text-sm font-medium text-slate-700">Script amélioré par IA</p>
-                                            {companionData.aiGeneratedAt && (
-                                                <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                                                    {companionData.aiGeneratedFrom ? `${companionData.aiGeneratedFrom} ` : ""}· {new Date(companionData.aiGeneratedAt).toLocaleDateString("fr-FR")}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <pre className="whitespace-pre-wrap text-sm leading-6 text-slate-700 font-sans">
-                                            {companionData.aiShared}
-                                        </pre>
-                                    </div>
-                                ) : (
-                                    <p className="text-sm text-slate-500">Aucun script IA disponible pour cette campagne.</p>
-                                )}
-                            </div>
+                            <ScriptPane
+                                content={companionData.aiShared}
+                                emptyLabel="Aucun script IA disponible pour cette campagne."
+                                meta={
+                                    companionData.aiGeneratedAt ? (
+                                        <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                            {companionData.aiGeneratedFrom ? `${companionData.aiGeneratedFrom} · ` : ""}
+                                            {new Date(companionData.aiGeneratedAt).toLocaleDateString("fr-FR")}
+                                        </span>
+                                    ) : null
+                                }
+                            />
                         ) : (
-                            <div className="space-y-3">
+                            <div className="flex min-h-0 flex-1 flex-col gap-2">
                                 <textarea
                                     value={additionalDraft}
                                     onChange={(e) => setAdditionalDraft(e.target.value)}
-                                    rows={16}
-                                    placeholder="Ajoutez votre script additionel ici..."
-                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                    placeholder="Ajoutez votre script additionnel ici…"
+                                    aria-label="Script additionnel"
+                                    className="min-h-[220px] w-full flex-1 resize-none rounded-xl border border-[#dfe7e3] bg-white px-3 py-3 text-sm leading-6 text-slate-700 focus:border-[#0c3b38] focus:outline-none focus:ring-2 focus:ring-[#0c3b38]/15"
                                 />
-                                <div className="flex items-center justify-between text-xs text-slate-500">
-                                    <span>{hasUnsavedChanges ? "Modifications non sauvegardées" : "Brouillon à jour"}</span>
-                                    {companionData.sharedUpdatedAt && (
-                                        <span>
-                                            Partagé le {new Date(companionData.sharedUpdatedAt).toLocaleString("fr-FR")}
-                                            {companionData.sharedUpdatedBy ? ` par ${companionData.sharedUpdatedBy}` : ""}
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="flex gap-2">
+
+                                <p className="flex items-center gap-1.5 text-xs">
+                                    <span
+                                        aria-hidden="true"
+                                        className={cn(
+                                            "h-1.5 w-1.5 shrink-0 rounded-full",
+                                            hasUnsavedChanges ? "bg-amber-500" : "bg-emerald-500"
+                                        )}
+                                    />
+                                    <span className={hasUnsavedChanges ? "text-amber-700" : "text-slate-500"}>
+                                        {hasUnsavedChanges ? "Modifications non sauvegardées" : "Brouillon à jour"}
+                                    </span>
+                                </p>
+
+                                {companionData.sharedUpdatedAt && (
+                                    <p className="text-xs text-slate-500">
+                                        Partagé le {new Date(companionData.sharedUpdatedAt).toLocaleString("fr-FR")}
+                                        {companionData.sharedUpdatedBy ? ` par ${companionData.sharedUpdatedBy}` : ""}
+                                    </p>
+                                )}
+
+                                {/* Pinned so the SDR never has to scroll back to save. */}
+                                <div className="sticky bottom-0 -mx-4 mt-1 flex flex-col gap-2 border-t border-[#dfe7e3] bg-white/95 px-4 pt-3 backdrop-blur @sm:flex-row">
                                     <Button
                                         onClick={handleSaveDraft}
                                         variant="secondary"
-                                        disabled={isSavingDraft || isPublishing}
-                                        loading={isSavingDraft}
+                                        disabled={isSavingDraft || isPublishing || !hasUnsavedChanges}
+                                        isLoading={isSavingDraft}
+                                        className="flex-1"
                                     >
-                                        Sauvegarder brouillon
+                                        Sauvegarder le brouillon
                                     </Button>
                                     <Button
                                         onClick={handleShare}
                                         disabled={isPublishing || isSavingDraft || !additionalDraft.trim()}
-                                        loading={isPublishing}
+                                        isLoading={isPublishing}
+                                        className="flex-1"
                                     >
-                                        Partager avec l'equipe
+                                        Partager avec l&apos;équipe
                                     </Button>
                                 </div>
                             </div>
                         )}
-                    </div>
+                    </>
                 )}
             </div>
         </Drawer>
