@@ -63,6 +63,7 @@ import { FilePreviewModal } from "./FilePreviewModal";
 import { FileDetailsInspector } from "./FileDetailsInspector";
 import { FileStorageBar } from "./FileStorageBar";
 import { FileBulkActionBar } from "./FileBulkActionBar";
+import { trackEvent, UMAMI_EVENTS } from "@/lib/analytics/umami";
 import {
   CreateFolderModal,
   ShareModal,
@@ -336,6 +337,7 @@ export default function FilesExplorer() {
         const json = await res.json();
         if (!json.success) throw new Error("Upload failed");
       }
+      trackEvent(UMAMI_EVENTS.FILE_UPLOADED, { count: filesList.length });
       success("Téléchargement réussi", `${filesList.length} fichier(s) ajouté(s) avec succès.`);
       fetchData();
     } catch {
@@ -1179,6 +1181,7 @@ export default function FilesExplorer() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
+                                trackEvent(UMAMI_EVENTS.FILE_DOWNLOADED, { fileId: file.id });
                                 const a = document.createElement("a");
                                 a.href = downloadUrl(file.id);
                                 a.download = file.originalName || file.name;
@@ -1359,6 +1362,7 @@ export default function FilesExplorer() {
                                 {file.source !== "google_drive" && (
                                   <button
                                     onClick={() => {
+                                      trackEvent(UMAMI_EVENTS.FILE_DOWNLOADED, { fileId: file.id });
                                       const a = document.createElement("a");
                                       a.href = downloadUrl(file.id);
                                       a.download = file.originalName || file.name;

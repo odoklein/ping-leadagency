@@ -1,3 +1,5 @@
+import { trackOpenReplayEvent } from "@/lib/analytics/openreplay";
+
 declare global {
   interface Window {
     umami?: {
@@ -73,6 +75,9 @@ export function trackEvent(event: UmamiEvent, data?: Record<string, unknown>) {
   } catch {
     // Silently fail – analytics should never break the app
   }
+  // Mirror every named business action into OpenReplay so it shows up
+  // alongside the session recording (filterable by role via user metadata).
+  trackOpenReplayEvent(event, data);
 }
 
 export function trackActionCreated(data: {

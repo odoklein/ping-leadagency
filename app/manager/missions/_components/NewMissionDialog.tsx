@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui";
 import { createMission, CreateMissionInput } from "@/app/actions/mission-wizard";
+import { trackMissionCreated } from "@/lib/analytics/umami";
 import { Channel } from "@prisma/client";
 import type { MissionStatusValue } from "@/lib/constants/missionStatus";
 import {
@@ -251,6 +252,7 @@ export function NewMissionDialog({ isOpen, onClose, onCreated }: Props) {
         try {
             const res = await createMission(form);
             if (res.success) {
+                trackMissionCreated({ channel: form.channel, clientCount: 1 });
                 success("Mission lancée 🎉", res.message || "Votre mission est configurée !");
                 onClose();
                 onCreated?.();

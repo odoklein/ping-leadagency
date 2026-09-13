@@ -5,6 +5,7 @@ import { useDropzone } from "react-dropzone";
 import { Button, useToast } from "@/components/ui";
 import { Upload, Trash2, Loader2, FileText, FileImage, FileSpreadsheet, File, FolderOpen, CloudUpload } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { trackEvent, UMAMI_EVENTS } from "@/lib/analytics/umami";
 
 const ACCEPT: Record<string, string[]> = {
     "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp"],
@@ -96,6 +97,7 @@ export default function ClientPortalFilesPage() {
             }
             setUploadingCount((c) => Math.max(0, c - acceptedFiles.length));
             if (successCount > 0) {
+                trackEvent(UMAMI_EVENTS.FILE_UPLOADED, { count: successCount });
                 await fetchFiles();
                 toast.success("Fichiers déposés", `${successCount} fichier(s) ajouté(s)`);
             }

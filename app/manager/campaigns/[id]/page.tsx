@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Card, Button, Badge, Modal, ModalFooter, LoadingState, EmptyState, Tabs } from "@/components/ui";
+import { trackEvent, UMAMI_EVENTS } from "@/lib/analytics/umami";
 import { cn } from "@/lib/utils";
 
 // ============================================
@@ -313,6 +314,10 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
             const json = await res.json();
 
             if (json.success) {
+                trackEvent(UMAMI_EVENTS.CAMPAIGN_STATUS_CHANGED, {
+                    campaignId: resolvedParams.id,
+                    isActive: !campaign?.isActive,
+                });
                 success(
                     campaign?.isActive ? "Campagne désactivée" : "Campagne activée",
                     "Le statut a été mis à jour"

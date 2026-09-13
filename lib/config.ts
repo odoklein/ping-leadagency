@@ -152,6 +152,13 @@ export const config = {
         process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID
       ),
     },
+    openreplay: {
+      projectKey: process.env.NEXT_PUBLIC_OPENREPLAY_PROJECT_KEY || "",
+      ingestPoint:
+        process.env.NEXT_PUBLIC_OPENREPLAY_INGEST_POINT ||
+        "https://openreplay.suzaliconseil.com/ingest",
+      enabled: !!process.env.NEXT_PUBLIC_OPENREPLAY_PROJECT_KEY,
+    },
   },
 
   // ============================================

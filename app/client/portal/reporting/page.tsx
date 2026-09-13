@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { ReportingSkeleton } from "@/components/client/skeletons";
+import { trackEvent, UMAMI_EVENTS } from "@/lib/analytics/umami";
 
 // Session & CR types (same shape as manager view)
 type SessionType = "Kick-Off" | "Onboarding" | "Validation" | "Reporting" | "Suivi" | "Autre";
@@ -82,7 +83,10 @@ export default function ClientPortalReportingPage() {
             try {
                 const res = await fetch("/api/client/reporting/monthly-summary");
                 const json = await res.json();
-                if (json.success) setData(json.data ?? []);
+                if (json.success) {
+                    setData(json.data ?? []);
+                    trackEvent(UMAMI_EVENTS.REPORT_VIEWED, { monthsAvailable: json.data?.length ?? 0 });
+                }
             } catch (e) {
                 console.error("Failed to load reporting data:", e);
             } finally {

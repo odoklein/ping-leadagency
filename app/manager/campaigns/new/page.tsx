@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, Button, Modal, ModalFooter, Select, Tabs, useToast } from "@/components/ui";
+import { trackEvent, UMAMI_EVENTS } from "@/lib/analytics/umami";
 import { ArrowLeft, Target, Loader2, MessageSquare, Sparkles, Plus, Wand2 } from "lucide-react";
 import Link from "next/link";
 
@@ -331,6 +332,7 @@ export default function NewCampaignPage() {
             const json = await res.json();
 
             if (json.success) {
+                trackEvent(UMAMI_EVENTS.CAMPAIGN_CREATED, { missionId: formData.missionId });
                 success("Campagne créée", `${formData.name} a été créée avec succès`);
                 router.push(`/manager/campaigns`);
             } else {

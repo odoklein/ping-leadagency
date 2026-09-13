@@ -25,6 +25,7 @@
     "@aws-sdk/s3-request-presigner": "^3.968.0",
     "@hookform/resolvers": "^5.2.2",
     "@netlify/plugin-nextjs": "^5.15.8",
+    "@openreplay/tracker": "^18.1.5",
     "@prisma/client": "^6.19.1",
     "@sentry/nextjs": "^10.40.0",
     "@sparticuz/chromium-min": "^143.0.4",
