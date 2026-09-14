@@ -186,6 +186,11 @@ function Avatar({ call, size = 32 }: { call: CallItem; size?: number }) {
 }
 
 /* ── Activity heatmap: answers "are you working my account?" at a glance ── */
+
+/** Monday-first, matching the column padding below. */
+const WEEKDAY_INITIALS = ["L", "M", "M", "J", "V", "S", "D"];
+const CELL = "h-3.5 w-3.5";
+
 function HeatmapStrip({ days, countsByDay, activeDay, onPickDay }: {
     days: string[];
     countsByDay: Record<string, number>;
@@ -200,6 +205,19 @@ function HeatmapStrip({ days, countsByDay, activeDay, onPickDay }: {
     const firstWeekday = (new Date(`${days[0]}T12:00:00`).getDay() + 6) % 7;
     const cells: (string | null)[] = [...Array<null>(firstWeekday).fill(null), ...days];
 
+    // One label per column, printed only when the month changes. Labels are wider
+    // than their 14px column, so the row is allowed to overflow like GitHub's.
+    const columnCount = Math.ceil(cells.length / 7);
+    const monthLabels: (string | null)[] = [];
+    let lastMonth = "";
+    for (let c = 0; c < columnCount; c++) {
+        const firstDay = cells.slice(c * 7, c * 7 + 7).find(Boolean);
+        if (!firstDay) { monthLabels.push(null); continue; }
+        const month = new Date(`${firstDay}T12:00:00`).toLocaleDateString("fr-FR", { month: "short" });
+        monthLabels.push(month === lastMonth ? null : month);
+        lastMonth = month;
+    }
+
     return (
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -213,28 +231,63 @@ function HeatmapStrip({ days, countsByDay, activeDay, onPickDay }: {
                 </div>
             </div>
 
-            <div className="overflow-x-auto pb-1">
-                <div className="grid grid-flow-col grid-rows-7 gap-1">
-                    {cells.map((day, i) => {
-                        if (!day) return <span key={`pad-${i}`} className="h-3.5 w-3.5" />;
-                        const n = countsByDay[day] ?? 0;
-                        const isActive = activeDay === day;
-                        return (
-                            <button
-                                key={day}
-                                type="button"
-                                onClick={() => onPickDay(isActive ? null : day)}
-                                title={`${fmtDayLabel(day)} — ${n} appel${n > 1 ? "s" : ""}`}
-                                aria-label={`${fmtDayLabel(day)}, ${n} appels`}
-                                aria-pressed={isActive}
-                                className={cn(
-                                    "h-3.5 w-3.5 rounded-sm transition-all hover:ring-2 hover:ring-slate-400",
-                                    TONES[level(n)],
-                                    isActive && "ring-2 ring-slate-900",
-                                )}
-                            />
-                        );
-                    })}
+            <div className="flex gap-1.5 overflow-x-auto pb-1">
+                {/* Weekday gutter. Every other day is labelled, so 14px rows stay legible. */}
+                <div className="grid shrink-0 grid-rows-7 gap-1 pt-[15px]">
+                    {WEEKDAY_INITIALS.map((d, i) => (
+                        <span
+                            key={i}
+                            aria-hidden="true"
+                            className={cn("flex items-center text-[9px] font-bold leading-none text-slate-400", CELL)}
+                        >
+                            {i % 2 === 0 ? d : ""}
+                        </span>
+                    ))}
+                </div>
+
+                <div className="shrink-0">
+                    <div className="mb-1 grid h-[11px] grid-flow-col auto-cols-[14px] gap-1">
+                        {monthLabels.map((label, i) => (
+                            <span
+                                key={i}
+                                aria-hidden="true"
+                                className="overflow-visible whitespace-nowrap text-[9px] font-bold leading-none text-slate-400"
+                            >
+                                {label}
+                            </span>
+                        ))}
+                    </div>
+
+                    {/* auto-cols-[14px] + justify-start is load-bearing: implicit column
+                        tracks default to `auto`, which stretches them across the full
+                        width and scatters the grid. */}
+                    <div
+                        role="grid"
+                        aria-label="Appels par jour"
+                        className="grid grid-flow-col grid-rows-7 auto-cols-[14px] justify-start gap-1"
+                    >
+                        {cells.map((day, i) => {
+                            if (!day) return <span key={`pad-${i}`} className={CELL} />;
+                            const n = countsByDay[day] ?? 0;
+                            const isActive = activeDay === day;
+                            return (
+                                <button
+                                    key={day}
+                                    type="button"
+                                    onClick={() => onPickDay(isActive ? null : day)}
+                                    title={`${fmtDayLabel(day)} — ${n} appel${n > 1 ? "s" : ""}`}
+                                    aria-label={`${fmtDayLabel(day)}, ${n} appels`}
+                                    aria-pressed={isActive}
+                                    className={cn(
+                                        CELL,
+                                        "rounded-sm transition-transform hover:ring-2 hover:ring-slate-400",
+                                        TONES[level(n)],
+                                        isActive && "ring-2 ring-slate-900",
+                                    )}
+                                />
+                            );
+                        })}
+                    </div>
                 </div>
             </div>
 
@@ -438,6 +491,8 @@ function ActiviteView() {
         return DEFAULT_STATUS_ORDER;
     }, [statusConfig]);
 
+    const [showAllStatuses, setShowAllStatuses] = useState(false);
+
     useEffect(() => {
         let cancelled = false;
         fetch("/api/client/action-status-config")
@@ -536,6 +591,29 @@ function ActiviteView() {
         }
         return counts;
     }, [calls]);
+
+    /**
+     * Which result chips to show up front. Outcomes carrying at least 5% of the
+     * period's calls lead (plus whatever is currently selected, so the active
+     * filter is never hidden); the rest fold behind a "+N autres" toggle.
+     */
+    const presentStatuses = useMemo(
+        () => statusOrder.filter((code) => (resultCounts[code] ?? 0) > 0 || resultFilter === code),
+        [statusOrder, resultCounts, resultFilter],
+    );
+
+    const visibleStatuses = useMemo(() => {
+        if (showAllStatuses) return presentStatuses;
+        const threshold = Math.max(1, Math.round(preResultFiltered.length * 0.05));
+        const kept = presentStatuses.filter(
+            (code) => (resultCounts[code] ?? 0) >= threshold || resultFilter === code,
+        );
+        // Never collapse to almost nothing: if the threshold is too aggressive,
+        // fall back to showing everything rather than a lone chip.
+        return kept.length >= 2 ? kept : presentStatuses;
+    }, [showAllStatuses, presentStatuses, resultCounts, resultFilter, preResultFiltered.length]);
+
+    const hiddenStatusCount = presentStatuses.length - visibleStatuses.length;
 
     const stats = useMemo(() => {
         const meetings = filtered.filter((c) => c.result === "MEETING_BOOKED").length;
@@ -674,7 +752,10 @@ function ActiviteView() {
                     )}
                 </div>
 
-                {/* Global result filter — one click, applies across every day and mission. */}
+                {/* Global result filter — one click, applies across every day and mission.
+                    The configured order is semantic (wins first, refusals last), so it is
+                    kept; only the long tail of low-count outcomes is folded away, since
+                    fifteen chips over three rows buried the ones that matter. */}
                 <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtrer par résultat">
                     <button type="button" onClick={() => setParam("r", null)} aria-pressed={!resultFilter}
                         className={cn(
@@ -688,9 +769,7 @@ function ActiviteView() {
                         </span>
                     </button>
 
-                    {statusOrder
-                        .filter((code) => (resultCounts[code] ?? 0) > 0 || resultFilter === code)
-                        .map((code) => {
+                    {visibleStatuses.map((code) => {
                             const m = resultMeta[code] ?? { label: ACTION_RESULT_LABELS[code] ?? code, color: NEUTRAL };
                             const active = resultFilter === code;
                             return (
@@ -708,6 +787,17 @@ function ActiviteView() {
                                 </button>
                             );
                         })}
+
+                    {hiddenStatusCount > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => setShowAllStatuses((v) => !v)}
+                            aria-expanded={showAllStatuses}
+                            className="flex items-center gap-1 rounded-xl border border-dashed border-slate-300 bg-white py-1.5 pl-2.5 pr-2 text-[11px] font-bold text-slate-500 transition-all hover:border-slate-400 hover:text-slate-700"
+                        >
+                            {showAllStatuses ? "Voir moins" : `+${hiddenStatusCount} autres`}
+                        </button>
+                    )}
                 </div>
             </div>
 

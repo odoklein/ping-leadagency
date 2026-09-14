@@ -401,6 +401,9 @@ function SidebarNavItem({
             <Link
                 href={item.href}
                 onClick={handleClick}
+                // The orange bar reads as "you are here" visually; this is the
+                // same signal for assistive tech.
+                aria-current={isActive ? "page" : undefined}
                 className={cn(cls, extraClass)}
                 {...hoverProps}
             >
@@ -744,14 +747,15 @@ export function GlobalSidebar({ navigation }: GlobalSidebarProps) {
             )}
 
             <aside
+                aria-label="Navigation principale"
                 className={cn(
                     "cp-sidebar",
-                    isCollapsed && !isHoveringState(isExpanded, isCollapsed)
-                        ? "cp-sidebar-collapsed"
-                        : "cp-sidebar-expanded",
-                    isCollapsed &&
-                        isHoveringState(isExpanded, isCollapsed) &&
-                        "cp-sidebar-hover-expanded",
+                    // Width now comes from .cp-layout; the only extra state is the
+                    // peek, which floats the rail over the page at its open width.
+                    isHoveringState(isExpanded, isCollapsed) && "cp-sidebar-peek",
+                    // "Showing as a narrow rail" — drives the icon-only styling
+                    // that can't be expressed by width alone.
+                    isCollapsed && !isHoveringState(isExpanded, isCollapsed) && "cp-sidebar-rail",
                     isMobileOpen
                         ? "cp-sidebar-mobile-open"
                         : "cp-sidebar-mobile-closed"
@@ -774,14 +778,27 @@ export function GlobalSidebar({ navigation }: GlobalSidebarProps) {
                         />
                     </Link>
 
+                    {/* Only when there is room for it: in rail mode the 56px header
+                        has none, and hovering peeks the rail open to reveal it. */}
                     {isExpanded && (
-                        <button
-                            onClick={toggleCollapsed}
-                            className="cp-collapse-btn"
-                            aria-label="Reduire la barre laterale"
-                        >
-                            <ChevronsLeft className="w-4 h-4" />
-                        </button>
+                    <button
+                        onClick={toggleCollapsed}
+                        className="cp-collapse-btn"
+                        aria-expanded={!isCollapsed}
+                        aria-label={
+                            isCollapsed
+                                ? "Déplier la barre latérale"
+                                : "Réduire la barre latérale"
+                        }
+                        title={isCollapsed ? "Déplier (Ctrl+B)" : "Réduire (Ctrl+B)"}
+                    >
+                        <ChevronsLeft
+                            className={cn(
+                                "w-4 h-4 transition-transform duration-200",
+                                isCollapsed && "rotate-180"
+                            )}
+                        />
+                    </button>
                     )}
 
                     <button

@@ -1691,21 +1691,15 @@ textarea::placeholder {
     display: flex;
     flex-direction: column;
     background: #FCFAFF;
-    transition: margin-left 280ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.cp-main-expanded {
-    margin-left: 220px;
-}
-
-.cp-main-collapsed {
-    margin-left: 56px;
+    /* Offset comes from the single width variable on .cp-layout, so the rail and
+       the content can never drift out of sync. Peek deliberately does NOT change
+       it: peeking is involuntary, and must not relayout the page. */
+    margin-left: var(--cp-sidebar-w);
+    transition: margin-left var(--cp-sidebar-motion);
 }
 
 @media (max-width: 1023px) {
-
-    .cp-main-expanded,
-    .cp-main-collapsed {
+    .cp-main {
         margin-left: 0;
     }
 }
@@ -1761,7 +1755,20 @@ textarea::placeholder {
     animation: spin 0.7s linear infinite;
 }
 
-/* --- Sidebar Container (dark theme — mockup) --- */
+/* --- Sidebar Container (dark theme — mockup) ---
+   One width lives on .cp-layout and drives both the rail and .cp-main's offset.
+   Peek widens the rail only; it overlays the page rather than pushing it. --- */
+.cp-layout {
+    --cp-sidebar-w: 220px;
+    --cp-sidebar-w-open: 220px;
+    /* Snappier than the old 280ms, matching the drawer shell. */
+    --cp-sidebar-motion: 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cp-layout-collapsed {
+    --cp-sidebar-w: 56px;
+}
+
 .cp-sidebar {
     position: fixed;
     top: 0;
@@ -1772,31 +1779,30 @@ textarea::placeholder {
     flex-direction: column;
     background: #0a302d;
     border-right: 1px solid rgba(255,255,255,0.07);
-    transition: width 280ms cubic-bezier(0.16, 1, 0.3, 1),
-        transform 280ms cubic-bezier(0.16, 1, 0.3, 1),
-        box-shadow 280ms cubic-bezier(0.16, 1, 0.3, 1);
+    width: var(--cp-sidebar-w);
+    transition: width var(--cp-sidebar-motion),
+        transform var(--cp-sidebar-motion),
+        box-shadow var(--cp-sidebar-motion);
     overflow: hidden;
+    /* Keep the rail's own repaints off the page behind it. */
+    contain: layout paint style;
     -webkit-font-smoothing: antialiased;
 }
 
-.cp-sidebar-expanded {
-    width: 220px;
-}
-
-.cp-sidebar-collapsed {
-    width: 56px;
-}
-
-.cp-sidebar-hover-expanded {
-    width: 240px;
-    box-shadow: 8px 0 32px -4px rgba(0, 0, 0, 0.15),
-        2px 0 8px -2px rgba(0, 0, 0, 0.08);
+/* Peek: the rail floats over the content at its normal open width. Same width as
+   pinned-open, so pinning from a peek doesn't make it jump. */
+.cp-sidebar.cp-sidebar-peek {
+    width: var(--cp-sidebar-w-open);
+    box-shadow: 8px 0 32px -4px rgba(0, 0, 0, 0.28),
+        2px 0 8px -2px rgba(0, 0, 0, 0.14);
     z-index: 60;
 }
 
 @media (max-width: 1023px) {
-    .cp-sidebar {
-        width: 260px !important;
+    .cp-sidebar,
+    .cp-sidebar.cp-sidebar-peek {
+        width: 260px;
+        box-shadow: none;
     }
 
     .cp-sidebar-mobile-closed {
@@ -1880,8 +1886,11 @@ textarea::placeholder {
     color: #ff9e1b;
 }
 
+/* Kept in the layout and in the tab order at all times — `display: none` took it
+   out of the tab order entirely, so keyboard users had no visible way to collapse
+   the rail. It fades in on hover, and on focus so it is reachable. */
 .cp-collapse-btn {
-    display: none;
+    display: flex;
     width: 28px;
     height: 28px;
     border-radius: 6px;
@@ -1892,11 +1901,20 @@ textarea::placeholder {
     border: none;
     cursor: pointer;
     flex-shrink: 0;
-    transition: all 150ms ease;
+    opacity: 0;
+    transition: opacity 140ms ease, background-color 140ms ease, color 140ms ease;
 }
 
-.cp-sidebar:hover .cp-collapse-btn {
-    display: flex;
+.cp-sidebar:hover .cp-collapse-btn,
+.cp-sidebar:focus-within .cp-collapse-btn {
+    opacity: 1;
+}
+
+.cp-collapse-btn:focus-visible {
+    opacity: 1;
+    outline: none;
+    color: #fff;
+    box-shadow: 0 0 0 1.5px rgba(255,158,27,0.65);
 }
 
 .cp-collapse-btn:hover {
@@ -1912,7 +1930,7 @@ textarea::placeholder {
     border: none;
     cursor: pointer;
     border-radius: 6px;
-    transition: all 150ms ease;
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
 }
 
 .cp-mobile-close:hover {
@@ -1941,7 +1959,7 @@ textarea::placeholder {
     border: 1px solid rgba(255,255,255,0.08);
     background: rgba(255,255,255,0.05);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
     flex-shrink: 0;
 }
 
@@ -1985,7 +2003,7 @@ textarea::placeholder {
     background: rgba(255,255,255,0.05);
     color: rgba(255,255,255,0.40);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
     flex-shrink: 0;
 }
 
@@ -2071,11 +2089,18 @@ textarea::placeholder {
     color: rgba(255,255,255,0.50);
     text-decoration: none;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: background-color 140ms ease, color 140ms ease;
     user-select: none;
     overflow: visible;
     white-space: nowrap;
     margin-bottom: 2px;
+}
+
+.cp-nav-item:focus-visible {
+    outline: none;
+    color: #fff;
+    background: rgba(255,255,255,0.07);
+    box-shadow: inset 0 0 0 1.5px rgba(255,158,27,0.65);
 }
 
 .cp-nav-item:hover {
@@ -2097,17 +2122,23 @@ textarea::placeholder {
     background: rgba(255,158,27,0.18);
 }
 
-/* Active indicator bar */
+/* Active indicator bar — scales in from the centre, compositor-only. */
 .cp-nav-item-active::before {
     content: '';
     position: absolute;
     left: 0;
     top: 50%;
-    transform: translateY(-50%);
     width: 3px;
     height: 20px;
     border-radius: 0 2px 2px 0;
     background: #ff9e1b;
+    transform: translateY(-50%) scaleY(1);
+    animation: cpNavActiveIn 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes cpNavActiveIn {
+    from { transform: translateY(-50%) scaleY(0.2); opacity: 0; }
+    to { transform: translateY(-50%) scaleY(1); opacity: 1; }
 }
 
 /* --- Nav Icon --- */
@@ -2135,17 +2166,19 @@ textarea::placeholder {
     flex: 1;
     min-width: 0;
     overflow: hidden;
-    transition: opacity 180ms ease, width 250ms cubic-bezier(0.16, 1, 0.3, 1);
+    white-space: nowrap;
+    /* Opacity only. The rail is overflow:hidden, so the label is clipped by the
+       width animation for free — animating its width too just multiplied the
+       layout work by the number of nav items. */
+    transition: opacity 140ms ease;
 }
 
 .cp-nav-label-visible {
     opacity: 1;
-    width: auto;
 }
 
 .cp-nav-label-hidden {
     opacity: 0;
-    width: 0;
     pointer-events: none;
 }
 
@@ -2353,7 +2386,7 @@ textarea::placeholder {
     background: transparent;
     color: rgba(255,255,255,0.35);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
     margin-bottom: 4px;
 }
 
@@ -2373,7 +2406,7 @@ textarea::placeholder {
     border: none;
     background: transparent;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
     text-align: left;
 }
 
@@ -2500,7 +2533,7 @@ textarea::placeholder {
     background: none;
     border-radius: 6px;
     cursor: pointer;
-    transition: all 120ms ease;
+    transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
     text-align: left;
 }
 
@@ -2525,7 +2558,8 @@ textarea::placeholder {
     .cp-brand-mark,
     .cp-user-btn,
     .cp-collapse-btn,
-    .cp-tooltip-portal {
+    .cp-tooltip-portal,
+    .cp-nav-item-active::before {
         transition: none !important;
         animation: none !important;
     }
@@ -2539,8 +2573,7 @@ textarea::placeholder {
         display: none !important;
     }
 
-    .cp-main-expanded,
-    .cp-main-collapsed {
+    .cp-main {
         margin-left: 0 !important;
     }
 }

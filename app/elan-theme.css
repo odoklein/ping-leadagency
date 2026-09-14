@@ -337,7 +337,7 @@ body.elan-app :focus-visible {
     background:
         radial-gradient(circle at 0 100%, rgba(40, 144, 248, 0.12), transparent 32%),
         linear-gradient(165deg, #080808 0%, #121212 100%) !important;
-    box-shadow: 14px 0 38px rgba(0, 0, 0, 0.25) !important;
+    box-shadow: 8px 0 24px -8px rgba(0, 0, 0, 0.22);
 }
 
 .cp-sidebar-header {
@@ -345,22 +345,13 @@ body.elan-app :focus-visible {
     padding: 16px 16px 14px;
 }
 
-.cp-sidebar-expanded {
-    width: 220px;
-}
-
-.cp-sidebar-collapsed {
-    width: 56px;
-}
-
-.cp-sidebar-collapsed .cp-sidebar-header {
+/* Width is owned by --cp-sidebar-w in globals.css — this file used to redeclare
+   it here (and with a third, different peek width), which is how the rail and
+   .cp-main's offset drifted apart. Only the rail-specific look stays. */
+.cp-sidebar-rail .cp-sidebar-header {
     padding-left: 0;
     padding-right: 0;
     justify-content: center;
-}
-
-.cp-sidebar-hover-expanded {
-    width: 232px;
 }
 
 .cp-brand {

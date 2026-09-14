@@ -80,7 +80,7 @@ function InnerLayout({
     const { data: session, status } = useSession();
     const router = useRouter();
     const pathname = usePathname();
-    const { isCollapsed, isHovering, searchOpen, closeSearch } = useSidebar();
+    const { isCollapsed, searchOpen, closeSearch } = useSidebar();
 
     const userRole = session?.user?.role as UserRole | undefined;
     const roleConfig = userRole ? ROLE_CONFIG[userRole] : null;
@@ -487,7 +487,7 @@ function InnerLayout({
     };
 
     return (
-        <div className="cp-layout">
+        <div className={cn("cp-layout", isCollapsed && "cp-layout-collapsed")}>
             <GlobalSearchModal
                 open={searchOpen}
                 onClose={closeSearch}
@@ -495,14 +495,9 @@ function InnerLayout({
             />
             <GlobalSidebar navigation={navigation} />
 
-            <main
-                className={cn(
-                    "cp-main",
-                    isCollapsed && !isHovering
-                        ? "cp-main-collapsed"
-                        : "cp-main-expanded"
-                )}
-            >
+            {/* No peek term here on purpose: hovering the rail must not relayout
+                the page. The peek overlays the content instead. */}
+            <main className="cp-main">
                 <header className="cp-topbar">
                     <div className="flex min-w-0 items-center gap-3">
                         <MobileMenuButton />
