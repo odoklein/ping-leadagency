@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { Card, Input, Select } from "@/components/ui";
 import { CreateMissionInput } from "@/app/actions/mission-wizard";
 
@@ -19,6 +20,19 @@ export function MissionDetails({ data, onChange, clients, errors }: MissionDetai
     const handleChange = (field: keyof CreateMissionInput, value: any) => {
         onChange({ ...data, [field]: value });
     };
+
+    // Show what the mission total works out to per week, so the number the manager
+    // types can be sanity-checked against the goal line it will produce.
+    const weeklyHint = useMemo(() => {
+        const total = Number.parseInt(data.targetMeetings ?? "", 10);
+        if (!Number.isFinite(total) || total <= 0) return null;
+        const start = new Date(data.startDate);
+        const end = new Date(data.endDate);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+        const weeks = (end.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000);
+        if (weeks <= 0) return null;
+        return Math.max(1, Math.round(total / weeks));
+    }, [data.targetMeetings, data.startDate, data.endDate]);
 
     return (
         <div className="space-y-6">
@@ -125,6 +139,27 @@ export function MissionDetails({ data, onChange, clients, errors }: MissionDetai
                             onChange={(e) => handleChange("endDate", e.target.value)}
                             error={errors.endDate}
                         />
+                    </div>
+
+                    {/* RDV target — sits with the dates because it is pro-rated across
+                        them to drive the weekly goal on the manager dashboard. */}
+                    <div>
+                        <Input
+                            label="Objectif RDV (sur toute la mission)"
+                            type="number"
+                            min={1}
+                            step={1}
+                            inputMode="numeric"
+                            placeholder="Ex : 24"
+                            value={data.targetMeetings ?? ""}
+                            onChange={(e) => handleChange("targetMeetings", e.target.value)}
+                            error={errors.targetMeetings}
+                        />
+                        <p className="mt-1.5 text-xs text-slate-500">
+                            {weeklyHint
+                                ? `Soit environ ${weeklyHint} RDV par semaine sur la durée de la mission.`
+                                : "Optionnel. Sert d'objectif hebdomadaire sur le tableau de bord."}
+                        </p>
                     </div>
                 </div>
             </Card>

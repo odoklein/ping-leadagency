@@ -33,6 +33,7 @@ export default function NewMissionPage() {
     const [missionData, setMissionData] = useState<CreateMissionInput & { channels?: Channel[] }>({
         name: "",
         objective: "",
+        targetMeetings: "",
         channel: "CALL" as Channel,
         channels: ["CALL"],
         // Campaign fields

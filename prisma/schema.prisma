@@ -728,6 +728,9 @@ model Mission {
 
   startDate     DateTime
   endDate       DateTime
+  /// RDV target for the whole mission, set at creation. Pro-rated per week to
+  /// drive the manager dashboard's goal line. Null = no target set.
+  targetMeetings Int?
   status        MissionStatus @default(ACTIVE)
   isActive      Boolean   @default(true)
   campaigns     Campaign[]

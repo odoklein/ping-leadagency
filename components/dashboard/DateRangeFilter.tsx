@@ -24,7 +24,9 @@ export interface DateRangeValue {
 const PRESETS: { key: DateRangePreset; label: string }[] = [
     { key: "last7", label: "7 derniers jours" },
     { key: "last4weeks", label: "4 dernières semaines" },
-    { key: "lastMonth", label: "Mois dernier" },
+    // Rolling 30 days (see getPresetRange), not the previous calendar month —
+    // "Mois dernier" read as October when it meant the last 30 days.
+    { key: "lastMonth", label: "30 derniers jours" },
     { key: "last6months", label: "6 derniers mois" },
     { key: "last12months", label: "12 derniers mois" },
     { key: "monthToDate", label: "Mois en cours" },

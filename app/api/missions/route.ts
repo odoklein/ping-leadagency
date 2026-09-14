@@ -26,6 +26,8 @@ const createMissionSchema = z.object({
     channels: z.array(channelEnum).min(1, 'Sélectionnez au moins un canal').optional(),
     startDate: z.string().transform((s) => new Date(s)),
     endDate: z.string().transform((s) => new Date(s)),
+    // Null clears the target; omitted leaves it untouched.
+    targetMeetings: z.coerce.number().int().positive().nullable().optional(),
     status: missionStatusEnum.optional().default('DRAFT'),
     isActive: z.boolean().optional(),
 }).transform((data) => {
@@ -45,6 +47,8 @@ const updateMissionSchema = z.object({
     channels: z.array(channelEnum).min(1).optional(),
     startDate: z.string().transform((s) => new Date(s)).optional(),
     endDate: z.string().transform((s) => new Date(s)).optional(),
+    // Null clears the target; omitted leaves it untouched.
+    targetMeetings: z.coerce.number().int().positive().nullable().optional(),
     status: missionStatusEnum.optional(),
     isActive: z.boolean().optional(),
 }).partial().transform((data) => {

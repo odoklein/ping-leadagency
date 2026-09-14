@@ -36,6 +36,8 @@ interface DashboardStats {
     alloConfigured: boolean;
     /** Real cumulative RDV count per day of the current week (Monday-first, 7 values). */
     weeklyTrajectory: number[];
+    weekDayIndex?: number;
+    weeklyMeetingGoal?: number | null;
 }
 interface MissionSummaryItem {
     id: string; name: string; isActive: boolean;
@@ -52,12 +54,13 @@ interface RecentActivityItem {
 /* ─── Constants ─── */
 const PRESET_LABELS: Record<DateRangePreset, string> = {
     last7: "7 derniers jours", last4weeks: "4 dernières semaines",
-    lastMonth: "Mois dernier", last6months: "6 derniers mois",
+    lastMonth: "30 derniers jours", last6months: "6 derniers mois",
     last12months: "12 derniers mois", monthToDate: "Mois en cours",
     quarterToDate: "Trimestre en cours", yearToDate: "Année en cours",
     allTime: "Tout",
 };
-const RDV_WEEKLY_GOAL = 30;
+/** Used only when no mission in scope has a targetMeetings set. */
+const RDV_WEEKLY_GOAL_FALLBACK = 10;
 const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const EMPTY_MISSIONS: MissionSummaryItem[] = [];
 const EMPTY_RECENT_ACTIVITY: RecentActivityItem[] = [];
@@ -66,12 +69,31 @@ const EMPTY_RECENT_ACTIVITY: RecentActivityItem[] = [];
 function getInitials(name: string) {
     return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 }
-function buildWeeklyGoalData(weeklyTrajectory: number[] | undefined) {
+/** Working days the weekly goal is spread over. Nobody prospects at the weekend. */
+const WORKING_DAYS = 5;
+
+/**
+ * Build the Mon–Sun series.
+ *
+ * Two things the naive version got wrong:
+ * - The goal ramped across all 7 days, so it kept climbing on Saturday and
+ *   Sunday when no one is calling. It now ramps Mon–Fri and holds flat.
+ * - `weeklyTrajectory` is cumulative over the whole week, and days that have not
+ *   happened yet carry the running total forward unchanged. Plotted as-is, the
+ *   realised line ran flat to Sunday — so a Tuesday read as "the week ended at 1"
+ *   rather than "we are two days in". Future days are now null, which stops the
+ *   line at today.
+ */
+function buildWeeklyGoalData(
+    weeklyTrajectory: number[] | undefined,
+    weekDayIndex: number,
+    weeklyGoal: number,
+) {
     return DAYS.map((jour, i) => ({
         jour: jour.slice(0, 2),
         jourComplet: jour,
-        objectif: Math.round((RDV_WEEKLY_GOAL / 7) * (i + 1) * 10) / 10,
-        cumul: weeklyTrajectory?.[i] ?? 0,
+        objectif: Math.round((weeklyGoal / WORKING_DAYS) * Math.min(i + 1, WORKING_DAYS) * 10) / 10,
+        cumul: i <= weekDayIndex ? weeklyTrajectory?.[i] ?? 0 : null,
     }));
 }
 
@@ -161,13 +183,24 @@ export default function ManagerDashboard() {
     // This week's real cumulative RDV count (last day of weeklyTrajectory), not the
     // selected-period total — the card below is explicitly a weekly goal indicator.
     const thisWeekRdv = stats?.weeklyTrajectory?.[6] ?? 0;
-    const rdvGoalPct = Math.min((thisWeekRdv / RDV_WEEKLY_GOAL) * 100, 100);
+    // Real goal = each in-scope mission's targetMeetings spread over its own
+    // duration, summed by the API. Only falls back when nobody has set one.
+    const weeklyGoal = stats?.weeklyMeetingGoal && stats.weeklyMeetingGoal > 0
+        ? stats.weeklyMeetingGoal
+        : RDV_WEEKLY_GOAL_FALLBACK;
+    const rdvGoalPct = Math.min((thisWeekRdv / weeklyGoal) * 100, 100);
     const hotLeads = stats ? (stats.resultBreakdown.INTERESTED + stats.resultBreakdown.CALLBACK_REQUESTED) : 0;
     const callbackCount = stats?.resultBreakdown?.CALLBACK_REQUESTED ?? 0;
     const interestedCount = stats?.resultBreakdown?.INTERESTED ?? 0;
 
     const missionsNearGoal = useMemo(() => missions.filter((m) => m.isActive && m.meetingsThisPeriod > 0).sort((a, b) => b.meetingsThisPeriod - a.meetingsThisPeriod).slice(0, 5), [missions]);
-    const weeklyGoalData = useMemo(() => buildWeeklyGoalData(stats?.weeklyTrajectory), [stats?.weeklyTrajectory]);
+    // Fall back to Sunday so a stats payload without the field still renders the
+    // full week rather than an empty line.
+    const weekDayIndex = stats?.weekDayIndex ?? 6;
+    const weeklyGoalData = useMemo(
+        () => buildWeeklyGoalData(stats?.weeklyTrajectory, weekDayIndex, weeklyGoal),
+        [stats?.weeklyTrajectory, weekDayIndex, weeklyGoal],
+    );
 
     const setQuickPreset = (preset: DateRangePreset) => {
         const range = getPresetRange(preset);
@@ -381,12 +414,15 @@ export default function ManagerDashboard() {
                     </div>
 
                     <div className="my-4 z-10">
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">RDV Confirmés</p>
+                        {/* Scope is deliberately in the label: this card is the weekly
+                            goal gauge and ignores the page's period filter, so a bare
+                            "RDV Confirmés" reads as contradicting the period total below. */}
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">RDV cette semaine</p>
                         <div className="flex items-baseline gap-2 mt-1">
                             <p className="text-3xl sm:text-4xl font-black text-white tracking-tight tabular-nums">
                                 {thisWeekRdv}
                             </p>
-                            <span className="text-xs text-slate-400 font-medium">/ {RDV_WEEKLY_GOAL} visés</span>
+                            <span className="text-xs text-slate-400 font-medium">/ {weeklyGoal} visés</span>
                         </div>
                     </div>
 
@@ -503,7 +539,7 @@ export default function ManagerDashboard() {
                             </div>
                             <div>
                                 <h2 className="text-base font-bold text-slate-900">Performance & Trajectoire RDV</h2>
-                                <p className="text-xs text-slate-500">Progression cumulée vs objectif hebdomadaire</p>
+                                <p className="text-xs text-slate-500">Semaine en cours · cumul vs objectif hebdomadaire</p>
                             </div>
                         </div>
 
@@ -556,24 +592,33 @@ export default function ManagerDashboard() {
                                     strokeWidth={3}
                                     fill="url(#manager-perf-gradient)"
                                     name="RDV Réalisés"
+                                    // Days after today are null; the line must stop there
+                                    // rather than bridge across to Sunday.
+                                    connectNulls={false}
                                 />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
 
-                    {/* Summary Row */}
-                    <div className="grid grid-cols-3 gap-2 pt-4 border-t border-slate-100 bg-slate-50/60 -mx-6 -mb-6 p-4 rounded-b-3xl">
-                        <div className="text-center">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Actions</p>
-                            <p className="text-base font-black text-slate-900 tabular-nums">{stats?.totalActions ?? 0}</p>
-                        </div>
-                        <div className="text-center border-x border-slate-200">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">RDV Confirmés</p>
-                            <p className="text-base font-black text-[#2890F8] tabular-nums">{stats?.meetingsBooked ?? 0}</p>
-                        </div>
-                        <div className="text-center">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Taux de Succès</p>
-                            <p className="text-base font-black text-emerald-600 tabular-nums">{Math.round((stats?.conversionRate ?? 0) * 10) / 10}%</p>
+                    {/* Summary Row — period-scoped, unlike the Mon–Sun chart above it,
+                        so it says so. */}
+                    <div className="-mx-6 -mb-6 space-y-2 rounded-b-3xl border-t border-slate-100 bg-slate-50/60 p-4 pt-4">
+                        <p className="text-center text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                            Sur la période sélectionnée
+                        </p>
+                        <div className="grid grid-cols-3 gap-2">
+                            <div className="text-center">
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Actions</p>
+                                <p className="text-base font-black text-slate-900 tabular-nums">{stats?.totalActions ?? 0}</p>
+                            </div>
+                            <div className="text-center border-x border-slate-200">
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">RDV Confirmés</p>
+                                <p className="text-base font-black text-[#2890F8] tabular-nums">{stats?.meetingsBooked ?? 0}</p>
+                            </div>
+                            <div className="text-center">
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Taux de Succès</p>
+                                <p className="text-base font-black text-emerald-600 tabular-nums">{Math.round((stats?.conversionRate ?? 0) * 10) / 10}%</p>
+                            </div>
                         </div>
                     </div>
                 </section>

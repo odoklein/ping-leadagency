@@ -30,6 +30,8 @@ const updateMissionSchema = z
         channels: z.array(channelEnum).min(1).optional(),
         startDate: z.string().transform((s) => new Date(s)).optional(),
         endDate: z.string().transform((s) => new Date(s)).optional(),
+        // Null clears the target; omitted leaves it untouched.
+        targetMeetings: z.coerce.number().int().positive().nullable().optional(),
         status: missionStatusEnum.optional(),
         isActive: z.boolean().optional(),
         teamLeadSdrId: z.string().nullable().optional(),

@@ -133,6 +133,19 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
         actionWhere.campaign = { is: campaignWhere };
     }
 
+    // Missions the caller can see, mirroring the campaign scope above. Used to
+    // derive the RDV goal from Mission.targetMeetings instead of a hardcoded one.
+    const missionWhere: Prisma.MissionWhereInput = { isActive: true };
+    if (campaignWhere.mission && typeof campaignWhere.mission === 'object' && 'is' in campaignWhere.mission) {
+        Object.assign(missionWhere, campaignWhere.mission.is);
+    }
+    if (typeof campaignWhere.missionId === 'string') {
+        missionWhere.id = campaignWhere.missionId;
+    }
+    if (userRole === 'SDR') {
+        missionWhere.sdrAssignments = { some: { sdrId: userId.replace('apikey:', '') } };
+    }
+
     const [
         totalActions,
         actionsByResult,
@@ -232,6 +245,24 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
     });
     let runningTotal = 0;
     const weeklyTrajectory = dailyMeetingCounts.map((count) => (runningTotal += count));
+    // Monday=0 .. Sunday=6, from the same `now` that anchored the week above.
+    const weekDayIndex = mondayOffset;
+
+    // Weekly RDV goal: each in-scope mission's total target spread across its own
+    // duration, then summed. Null when no mission has a target set, so the
+    // dashboard can hide the goal line rather than invent one.
+    const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+    const goalMissions = await prisma.mission.findMany({
+        where: { ...missionWhere, targetMeetings: { not: null } },
+        select: { targetMeetings: true, startDate: true, endDate: true },
+    });
+    const weeklyGoalRaw = goalMissions.reduce((sum, m) => {
+        const weeks = (m.endDate.getTime() - m.startDate.getTime()) / WEEK_MS;
+        if (!Number.isFinite(weeks) || weeks <= 0) return sum;
+        return sum + (m.targetMeetings ?? 0) / weeks;
+    }, 0);
+    const weeklyMeetingGoal =
+        goalMissions.length > 0 && weeklyGoalRaw > 0 ? Math.max(1, Math.round(weeklyGoalRaw)) : null;
 
     let rdvBySdr: { sdrId: string; _count: { _all: number } }[] = [];
     if (userRole === 'MANAGER') {
@@ -348,10 +379,21 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
                 isActive: true,
                 client: { users: { some: { id: userId } } },
             },
-            select: { objective: true },
+            select: { objective: true, targetMeetings: true, startDate: true, endDate: true },
         });
-        const parsed = parseInt(mission?.objective ?? '', 10);
-        if (!isNaN(parsed) && parsed > 0) monthlyObjective = parsed;
+        // Prefer the real numeric target, pro-rated to a month. Fall back to the
+        // old trick of parsing the free-text objective for missions created before
+        // targetMeetings existed.
+        if (mission?.targetMeetings && mission.targetMeetings > 0) {
+            const months =
+                (mission.endDate.getTime() - mission.startDate.getTime()) / (30 * 24 * 60 * 60 * 1000);
+            monthlyObjective = months > 0
+                ? Math.max(1, Math.round(mission.targetMeetings / months))
+                : mission.targetMeetings;
+        } else {
+            const parsed = parseInt(mission?.objective ?? '', 10);
+            if (!isNaN(parsed) && parsed > 0) monthlyObjective = parsed;
+        }
     }
 
     const response = successResponse({
@@ -370,6 +412,8 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
         rdvLeaderboard,
         alloConfigured,
         weeklyTrajectory,
+        weekDayIndex,
+        weeklyMeetingGoal,
         lastActivityDate,
         contactsReached,
         monthlyObjective,

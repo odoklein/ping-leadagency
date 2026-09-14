@@ -11,6 +11,13 @@ import { revalidatePath } from "next/cache";
 // TYPES
 // ============================================
 
+/** The form holds a string; anything not a positive integer means "no target". */
+function parseTargetMeetings(raw: string | undefined): number | null {
+    if (raw === undefined || raw.trim() === "") return null;
+    const n = Number.parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 export interface CreateMissionInput {
     // Mission fields
     name: string;
@@ -21,6 +28,8 @@ export interface CreateMissionInput {
     clientId: string;
     startDate: string;
     endDate: string;
+    /** RDV target for the whole mission. Empty string = not set. */
+    targetMeetings?: string;
     // Campaign fields (unified creation)
     icp: string;
     pitch: string;
@@ -82,6 +91,7 @@ export async function createMission(
                     clientId: missionData.clientId,
                     startDate: new Date(missionData.startDate),
                     endDate: new Date(missionData.endDate),
+                    targetMeetings: parseTargetMeetings(missionData.targetMeetings),
                     status: missionData.status ?? "DRAFT",
                     isActive: (missionData.status ?? "DRAFT") === "ACTIVE",
                 },
