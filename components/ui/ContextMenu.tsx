@@ -70,15 +70,16 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
     return createPortal(
         <div
             ref={menuRef}
-            className="fixed z-[100] min-w-[180px] bg-white rounded-xl shadow-lg border border-slate-200 py-1 animate-in fade-in zoom-in-95 duration-100"
+            role="menu"
+            className="cp-pop cp-pop-items fixed min-w-[184px]"
             style={{ left: adjustedX, top: adjustedY }}
         >
             {items.map((item, index) => (
-                <div key={index}>
-                    {item.divider && index > 0 && (
-                        <div className="h-px bg-slate-200 my-1" />
-                    )}
+                <div key={index} className="contents">
+                    {item.divider && index > 0 && <div className="cp-pop-separator" />}
                     <button
+                        type="button"
+                        role="menuitem"
                         onClick={() => {
                             if (!item.disabled) {
                                 item.onClick();
@@ -86,15 +87,14 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
                             }
                         }}
                         disabled={item.disabled}
-                        className={`w-full flex items-center gap-3 px-3 py-2 text-sm transition-colors ${item.disabled
-                                ? "text-slate-400 cursor-not-allowed"
-                                : item.variant === "danger"
-                                    ? "text-red-600 hover:bg-red-50"
-                                    : "text-slate-700 hover:bg-slate-50"
-                            }`}
+                        className={
+                            item.variant === "danger"
+                                ? "cp-pop-item cp-pop-item-danger"
+                                : "cp-pop-item"
+                        }
                     >
-                        {item.icon}
-                        {item.label}
+                        {item.icon && <span className="cp-pop-item-icon">{item.icon}</span>}
+                        <span className="cp-pop-item-label">{item.label}</span>
                     </button>
                 </div>
             ))}

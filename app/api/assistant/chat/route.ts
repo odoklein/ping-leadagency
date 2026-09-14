@@ -22,6 +22,7 @@ import {
     normalizeAssistantMemoryStore,
     upsertConversation,
 } from "@/lib/assistant/memory";
+import { recordAssistantTurn } from "@/lib/assistant/transcripts";
 import { buildManagerLiveDataContext } from "@/lib/assistant/managerLiveData";
 import { buildDocsContext } from "@/lib/assistant/docs/loader";
 import { MistralError } from "@/lib/ai/mistral";
@@ -138,6 +139,9 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
         payload.conversationId || memoryStore.activeConversationId || fallbackConversationId;
     const memoryContext = buildMemoryContextSnippet(memoryStore, conversationId);
 
+    // Stamped after the id is resolved so tools can reference the exchange.
+    aiContext.conversationId = conversationId;
+
     const managerLiveContext =
         aiContext.isGlobalScope && latestUserQuestion
             ? await buildManagerLiveDataContext(latestUserQuestion)
@@ -206,6 +210,21 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
             if (targetSession) {
                 targetSession.summary = buildSessionSummary(targetSession.messages);
             }
+
+            // Durable transcript for the manager observability view. Fire and
+            // forget: the answer is already on its way to the user.
+            void recordAssistantTurn({
+                userId: session.user.id,
+                userRole: aiContext.role,
+                clientId: aiContext.clientId,
+                conversationId,
+                question: latestUserQuestion,
+                answer: result.answer,
+                model: result.model,
+                toolCalls: result.toolCalls,
+                latencyMs: Date.now() - startedAt,
+                totalTokens: result.usage.totalTokens,
+            });
 
             // Non-blocking memory save; do not fail response if persistence fails.
             prisma.user

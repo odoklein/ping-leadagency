@@ -1314,7 +1314,7 @@ const QuickAddPopover = forwardRef<HTMLDivElement, QuickAddPopoverProps>(functio
     return (
         <div
             ref={ref}
-            className="fixed z-40 w-[320px] rounded-2xl border border-slate-200 bg-white shadow-2xl"
+            className="cp-pop fixed w-[320px]"
             style={{ top: position.top, left: position.left }}
         >
             <form onSubmit={handleSubmit} className="p-4 space-y-3">

@@ -265,13 +265,13 @@ export function ThreadView({
                         {showMenu && (
                             <>
                                 <button type="button" className="fixed inset-0 z-10 cursor-default" onClick={() => setShowMenu(false)} aria-label="Fermer le menu" />
-                                <div className="absolute right-0 top-full z-20 mt-1.5 w-56 rounded-xl border border-slate-200/80 bg-white py-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-800" role="menu">
+                                <div className="cp-pop cp-pop-items cp-pop-origin-tr absolute right-0 top-full mt-1.5 w-56" role="menu">
                                     {thread.status === "OPEN" ? (
                                         <button
                                             type="button"
                                             role="menuitem"
                                             onClick={() => { onStatusChange("RESOLVED"); setShowMenu(false); }}
-                                            className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] font-medium text-[#12122A] hover:bg-emerald-50 dark:text-slate-300 dark:hover:bg-slate-700 transition-colors"
+                                            className="cp-pop-item"
                                         >
                                             <CheckCircle className="w-4 h-4 text-emerald-600" />
                                             <span>Marquer comme résolue</span>
@@ -281,7 +281,7 @@ export function ThreadView({
                                             type="button"
                                             role="menuitem"
                                             onClick={() => { onStatusChange("OPEN"); setShowMenu(false); }}
-                                            className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] font-medium text-[#12122A] hover:bg-emerald-50 dark:text-slate-300 dark:hover:bg-slate-700 transition-colors"
+                                            className="cp-pop-item"
                                         >
                                             <RotateCcw className="w-4 h-4 text-emerald-600" />
                                             <span>Rouvrir la discussion</span>
@@ -292,7 +292,7 @@ export function ThreadView({
                                             type="button"
                                             role="menuitem"
                                             onClick={() => { onStatusChange("ARCHIVED"); setShowMenu(false); }}
-                                            className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] font-medium text-[#12122A] hover:bg-[#F4F0E8]/60 dark:text-slate-300 dark:hover:bg-slate-700 transition-colors"
+                                            className="cp-pop-item"
                                         >
                                             <Archive className="w-4 h-4 text-[#8B8BA7]" />
                                             <span>Archiver</span>

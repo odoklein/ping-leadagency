@@ -6,6 +6,17 @@ import { z } from "zod";
 import { JsonSchemaObject, ToolDefinition } from "./types";
 
 /**
+ * Hard cap on *mutating* tool calls per assistant request. Reads are cheap to
+ * retry; writes are not. One user message creates at most one ticket, however
+ * many times the model asks.
+ *
+ * Lives here rather than in executor.ts so `context.ts` can seed the budget
+ * without importing the executor (which would close an import cycle through the
+ * registry and every tool definition).
+ */
+export const MAX_WRITE_CALLS_PER_REQUEST = 1;
+
+/**
  * Declare a tool. Keeps the model-facing JSON Schema and the server-side Zod
  * schema side by side so they cannot drift apart unnoticed.
  */
@@ -13,6 +24,17 @@ export function defineTool<TArgs, TResult>(
     definition: Omit<ToolDefinition<TArgs, TResult>, "mutates">
 ): ToolDefinition<TArgs, TResult> {
     return { ...definition, mutates: false };
+}
+
+/**
+ * Declare a tool with side effects. Deliberately a separate constructor from
+ * `defineTool` so every write in the system is greppable by name, and so a read
+ * tool can never become a write tool by editing one word.
+ */
+export function defineWriteTool<TArgs, TResult>(
+    definition: Omit<ToolDefinition<TArgs, TResult>, "mutates">
+): ToolDefinition<TArgs, TResult> {
+    return { ...definition, mutates: true };
 }
 
 /** Zod object that rejects unknown keys — the model must not smuggle extras. */

@@ -16,6 +16,7 @@ import {
   UserPlus,
   Mail,
   Inbox,
+  Bot,
   MessageSquare,
   Receipt,
   History,
@@ -75,6 +76,28 @@ export const MANAGER_NAV: NavSection[] = [
         icon: LayoutDashboard,
         label: "Tableau de bord",
         description: "Vue d'ensemble : KPIs de l'équipe, pipeline et alertes du jour.",
+        permission: "pages.dashboard",
+      },
+    ],
+  },
+  {
+    title: "Assistance & IA",
+    dividerBefore: true,
+    items: [
+      {
+        href: "/manager/tickets",
+        icon: LifeBuoy,
+        label: "Tickets support",
+        description:
+          "File de triage des demandes de l'équipe et des clients, y compris celles ouvertes par l'assistant IA.",
+        permission: "pages.dashboard",
+      },
+      {
+        href: "/manager/assistant",
+        icon: Bot,
+        label: "Usage assistant IA",
+        description:
+          "Volumes, taux d'échec et outils appelés. Le contenu des échanges n'est visible qu'en ouvrant une conversation.",
         permission: "pages.dashboard",
       },
     ],

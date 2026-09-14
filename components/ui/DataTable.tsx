@@ -329,8 +329,8 @@ export function DataTable<T extends Record<string, any>>({
                                 <ChevronDown className="w-3 h-3 text-slate" />
                             </button>
                             {showSecondaryMenu && (
-                                <div className="absolute z-20 mt-1 w-60 right-0 rounded-elan border border-line bg-surface shadow-elan-md">
-                                    <div className="flex items-center justify-between px-3 py-2 border-b border-line">
+                                <div className="cp-pop cp-pop-flush cp-pop-origin-tr absolute mt-1 w-60 right-0">
+                                    <div className="cp-pop-header justify-between">
                                         <p className="text-[10px] font-medium uppercase tracking-[0.07em] text-slate">
                                             Colonnes importées
                                         </p>
@@ -350,13 +350,13 @@ export function DataTable<T extends Record<string, any>>({
                                                 : "Toutes"}
                                         </button>
                                     </div>
-                                    <div className="max-h-64 overflow-y-auto py-1">
+                                    <div className="cp-pop-scroll cp-pop-items max-h-64">
                                         {secondaryColumns.map((col) => {
                                             const checked = visibleSecondaryKeys.includes(col.key);
                                             return (
                                                 <label
                                                     key={col.key}
-                                                    className="flex items-center gap-2 px-3 py-1.5 text-xs text-ink-soft hover:bg-paper cursor-pointer"
+                                                    className="cp-pop-item"
                                                 >
                                                     <input
                                                         type="checkbox"

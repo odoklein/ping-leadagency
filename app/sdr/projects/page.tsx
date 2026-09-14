@@ -503,24 +503,24 @@ function ProjectCard({
                         </button>
                         {showMenu && (
                             <div
-                                className="absolute right-0 top-8 z-10 bg-white border border-slate-200 rounded-lg shadow-lg py-1 w-40"
+                                className="cp-pop cp-pop-items cp-pop-origin-tr absolute right-0 top-8 w-40"
                                 onClick={(e) => e.preventDefault()}
                             >
                                 <button
                                     onClick={(e) => { e.stopPropagation(); onDuplicate(); setShowMenu(false); }}
-                                    className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                                    className="cp-pop-item"
                                 >
                                     <Copy className="w-3.5 h-3.5" /> Dupliquer
                                 </button>
                                 <button
                                     onClick={(e) => { e.stopPropagation(); onArchive(); setShowMenu(false); }}
-                                    className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                                    className="cp-pop-item"
                                 >
                                     <Archive className="w-3.5 h-3.5" /> Archiver
                                 </button>
                                 <button
                                     onClick={(e) => { e.stopPropagation(); onDelete(); setShowMenu(false); }}
-                                    className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+                                    className="cp-pop-item cp-pop-item-danger"
                                 >
                                     <Trash2 className="w-3.5 h-3.5" /> Supprimer
                                 </button>

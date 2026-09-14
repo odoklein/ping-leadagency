@@ -528,8 +528,7 @@ body.elan-app :focus-visible {
     border: 1px solid rgba(52, 211, 153, 0.4) !important;
 }
 
-.cp-nav-detail,
-.cp-user-role {
+.cp-nav-detail {
     color: rgba(255, 255, 255, 0.42) !important;
 }
 
@@ -658,16 +657,8 @@ body.elan-app :focus-visible {
     border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.cp-user-btn:hover {
-    background: rgba(255, 255, 255, 0.075) !important;
-}
-
 .cp-sidebar-footer {
     padding: 10px 12px 16px;
-}
-
-.cp-user-btn {
-    border-radius: 10px;
 }
 
 .cp-avatar {
@@ -677,23 +668,494 @@ body.elan-app :focus-visible {
     font-weight: 700;
 }
 
-.cp-avatar-status {
-    border-color: #080808 !important;
+/* ── Profile menu (sidebar footer identity) ─────────────────────────────
+   Trigger lives on the near-black rail; the popover is a light brand
+   surface, so the two halves use opposite palettes on purpose. */
+
+.cp-profile {
+    position: relative;
 }
 
-.cp-user-name {
-    color: #ffffff !important;
+.cp-profile-trigger {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 7px 8px;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    transition: background-color 150ms ease, border-color 150ms ease;
 }
 
-.cp-user-menu {
-    border: 1px solid var(--elan-line) !important;
-    border-radius: 12px !important;
-    background: var(--elan-surface) !important;
-    box-shadow: var(--elan-shadow-md) !important;
+.cp-profile-trigger:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.10);
 }
 
-.cp-user-menu-divider {
-    background: var(--elan-line) !important;
+.cp-profile-trigger:focus-visible {
+    outline: none;
+    border-color: rgba(40, 144, 248, 0.55);
+    box-shadow: 0 0 0 3px rgba(40, 144, 248, 0.20);
+}
+
+.cp-profile-trigger-open {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.14);
+}
+
+.cp-profile-trigger-collapsed {
+    justify-content: center;
+    gap: 0;
+    padding: 6px;
+}
+
+.cp-profile-avatar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background: var(--elan-amber);
+    color: #ffffff;
+    font-family: var(--font-elan-mono), monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    transition: box-shadow 150ms ease;
+}
+
+.cp-profile-trigger-open .cp-profile-avatar {
+    box-shadow: 0 0 0 3px rgba(40, 144, 248, 0.26);
+}
+
+.cp-profile-avatar-lg {
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+    font-size: 13px;
+}
+
+.cp-profile-presence {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    background: #22c55e;
+    border: 2px solid #080808;
+}
+
+.cp-profile-identity {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    overflow: hidden;
+}
+
+.cp-profile-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: #ffffff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cp-profile-role {
+    font-family: var(--font-elan-mono), monospace;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.46);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The bend mirrors rather than spins — a chevron rotation would read as a
+   tree disclosure, which this is not. */
+.cp-profile-bend {
+    flex-shrink: 0;
+    color: rgba(255, 255, 255, 0.34);
+    transition: color 180ms ease, transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.cp-profile-trigger:hover .cp-profile-bend {
+    color: rgba(255, 255, 255, 0.62);
+}
+
+.cp-profile-bend-open,
+.cp-profile-trigger:hover .cp-profile-bend-open {
+    color: var(--elan-amber);
+    transform: scaleX(-1);
+}
+
+/* ── Popover / dropdown surface (shared) ───────────────────────────────
+   One surface for every floating panel: dropdowns, selects, context menus,
+   date pickers, notification panels. Components pick a layout variant and
+   compose the item classes rather than restating the chrome each time. */
+
+.cp-pop {
+    /* Direction the panel travels in as it appears. Overridden by
+       .cp-pop-rise; read by the cpPopIn keyframes below. */
+    --cp-pop-from: -4px;
+    z-index: 1100;
+    padding: 6px;
+    border: 1px solid var(--elan-line);
+    border-radius: 14px;
+    background: var(--elan-surface);
+    box-shadow: var(--elan-shadow-md);
+    transform-origin: top center;
+    animation: cpPopIn 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Anchored above its trigger, so it rises into place instead of dropping. */
+.cp-pop-rise {
+    --cp-pop-from: 4px;
+    transform-origin: bottom center;
+}
+
+.cp-pop-origin-tr {
+    transform-origin: top right;
+}
+
+/* Panels that own their internal padding — search rows, sticky headers and
+   scroll areas all need to bleed to the rounded edge. */
+.cp-pop-flush {
+    padding: 0;
+    overflow: hidden;
+}
+
+@keyframes cpPopIn {
+    from {
+        opacity: 0;
+        transform: translateY(var(--cp-pop-from)) scale(0.98);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ── Popover structure ── */
+
+.cp-pop-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 10px 12px;
+}
+
+.cp-pop-flush > .cp-pop-header {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--elan-line);
+}
+
+.cp-pop-title {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--elan-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cp-pop-sub {
+    font-size: 11.5px;
+    line-height: 1.3;
+    color: var(--elan-slate);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cp-pop-separator {
+    height: 1px;
+    margin: 6px 4px;
+    background: linear-gradient(90deg, transparent, var(--elan-line-strong), transparent);
+}
+
+.cp-pop-items {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+/* Item list inside a flush panel has to re-add the gutter the surface gave up. */
+.cp-pop-flush .cp-pop-items {
+    padding: 6px;
+}
+
+.cp-pop-scroll {
+    max-height: 15rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--elan-paper-3) transparent;
+}
+
+.cp-pop-scroll::-webkit-scrollbar {
+    width: 8px;
+}
+
+.cp-pop-scroll::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+    background-color: var(--elan-paper-3);
+}
+
+.cp-pop-empty {
+    padding: 18px 12px;
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--elan-slate);
+}
+
+/* ── Popover items ── */
+
+.cp-pop-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--elan-ink-soft);
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.cp-pop-item:hover:not(:disabled),
+.cp-pop-item-highlight:not(:disabled) {
+    background: var(--elan-paper);
+    border-color: var(--elan-line);
+    color: var(--elan-ink);
+}
+
+.cp-pop-item:focus-visible {
+    outline: none;
+    border-color: rgba(40, 144, 248, 0.45);
+    background: var(--elan-paper);
+}
+
+.cp-pop-item:disabled,
+.cp-pop-item-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.cp-pop-item-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: var(--elan-slate);
+    transition: color 140ms ease;
+}
+
+.cp-pop-item:hover:not(:disabled) .cp-pop-item-icon,
+.cp-pop-item-highlight:not(:disabled) .cp-pop-item-icon {
+    color: var(--elan-amber);
+}
+
+.cp-pop-item-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Bare icons, for call sites that pass a lucide element straight in rather
+   than wrapping it in .cp-pop-item-icon. elan-theme.css is unlayered while
+   Tailwind utilities sit in @layer utilities, so this still wins over any
+   text-* colour left on the icon. */
+.cp-pop-item > svg {
+    flex-shrink: 0;
+    color: var(--elan-slate);
+    transition: color 140ms ease;
+}
+
+.cp-pop-item:hover:not(:disabled) > svg,
+.cp-pop-item-highlight:not(:disabled) > svg {
+    color: var(--elan-amber);
+}
+
+/* Currently-selected option. */
+.cp-pop-item-active,
+.cp-pop-item-active:hover {
+    background: rgba(40, 144, 248, 0.08);
+    border-color: rgba(40, 144, 248, 0.20);
+    color: var(--elan-amber-deep);
+    font-weight: 600;
+}
+
+.cp-pop-item-active .cp-pop-item-icon,
+.cp-pop-item-active > svg {
+    color: var(--elan-amber);
+}
+
+.cp-pop-item-danger {
+    background: rgba(185, 67, 62, 0.08);
+    color: var(--elan-danger);
+}
+
+.cp-pop-item-danger:hover:not(:disabled) {
+    background: rgba(185, 67, 62, 0.14);
+    border-color: rgba(185, 67, 62, 0.28);
+    color: var(--elan-danger);
+}
+
+.cp-pop-item-danger .cp-pop-item-icon,
+.cp-pop-item-danger:hover:not(:disabled) .cp-pop-item-icon,
+.cp-pop-item-danger > svg,
+.cp-pop-item-danger:hover:not(:disabled) > svg {
+    color: var(--elan-danger);
+}
+
+/* Rich result rows — an avatar plus two lines of text, or anything else that
+   keeps its own internal layout but should still hover and select like the
+   rest of the surface. */
+.cp-pop-row {
+    width: 100%;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.cp-pop-row:hover:not(:disabled) {
+    background: var(--elan-paper);
+    border-color: var(--elan-line);
+}
+
+.cp-pop-row-active,
+.cp-pop-row-active:hover {
+    background: rgba(40, 144, 248, 0.08);
+    border-color: rgba(40, 144, 248, 0.20);
+}
+
+.cp-pop-badge {
+    flex-shrink: 0;
+    padding: 2px 7px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    font-family: var(--font-elan-mono), monospace;
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.cp-pop-badge-accent {
+    background: rgba(40, 144, 248, 0.10);
+    border-color: rgba(40, 144, 248, 0.20);
+    color: var(--elan-amber-deep);
+}
+
+.cp-pop-badge-neutral {
+    background: var(--elan-paper-2);
+    border-color: var(--elan-line);
+    color: var(--elan-slate);
+}
+
+/* ── Search row (selects, searchable menus) ── */
+
+.cp-pop-search {
+    position: relative;
+    padding: 8px;
+    border-bottom: 1px solid var(--elan-line);
+}
+
+.cp-pop-search-icon {
+    position: absolute;
+    left: 19px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--elan-slate);
+    pointer-events: none;
+}
+
+.cp-pop-search input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--elan-line);
+    border-radius: 9px;
+    background: var(--elan-paper);
+    font-size: 13px;
+    color: var(--elan-ink);
+    transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.cp-pop-search-icon ~ input {
+    padding-left: 32px;
+}
+
+.cp-pop-search input::placeholder {
+    color: var(--elan-slate);
+}
+
+.cp-pop-search input:focus {
+    outline: none;
+    background: var(--elan-surface);
+    border-color: rgba(40, 144, 248, 0.45);
+}
+
+/* ── Checkbox marker (multi-select) ── */
+
+.cp-pop-check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--elan-line-strong);
+    border-radius: 5px;
+    color: #ffffff;
+    transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.cp-pop-check-on {
+    background: var(--elan-amber);
+    border-color: var(--elan-amber);
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .cp-pop {
+        animation: none;
+    }
+}
+
+/* ── Profile menu popover ── */
+
+.cp-profile-menu-identity {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
 /* Shared surfaces */

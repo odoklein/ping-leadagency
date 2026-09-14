@@ -212,36 +212,33 @@ export function Select({
                     <>
                         {/* Search Input */}
                         {searchable && (
-                            <div className="p-2 border-b border-slate-100">
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <input
-                                        ref={inputRef}
-                                        type="text"
-                                        value={searchQuery}
-                                        onChange={(e) => {
-                                            setSearchQuery(e.target.value);
-                                            setHighlightedIndex(0);
-                                        }}
-                                        onKeyDown={handleKeyDown}
-                                        placeholder="Rechercher..."
-                                        className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
-                                    />
-                                </div>
+                            <div className="cp-pop-search">
+                                <Search className="cp-pop-search-icon w-4 h-4" />
+                                <input
+                                    ref={inputRef}
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={(e) => {
+                                        setSearchQuery(e.target.value);
+                                        setHighlightedIndex(0);
+                                    }}
+                                    onKeyDown={handleKeyDown}
+                                    placeholder="Rechercher..."
+                                />
                             </div>
                         )}
 
                         {/* Options */}
-                        <div className="max-h-60 overflow-y-auto">
+                        <div className="cp-pop-scroll cp-pop-items">
                             {filteredOptions.length === 0 ? (
-                                <div className="px-4 py-3 text-sm text-slate-500 text-center">
-                                    Aucun résultat
-                                </div>
+                                <div className="cp-pop-empty">Aucun résultat</div>
                             ) : (
                                 filteredOptions.map((option, index) => (
                                     <button
                                         key={option.value}
                                         type="button"
+                                        role="option"
+                                        aria-selected={option.value === value}
                                         title={option.title}
                                         onClick={() => {
                                             if (!option.disabled) {
@@ -253,20 +250,17 @@ export function Select({
                                         onMouseEnter={() => setHighlightedIndex(index)}
                                         disabled={option.disabled}
                                         className={cn(
-                                            "w-full flex items-center justify-between gap-2 px-4 py-3 text-left transition-colors",
-                                            index === highlightedIndex && "bg-indigo-50",
-                                            option.disabled && "opacity-50 cursor-not-allowed"
+                                            "cp-pop-item",
+                                            index === highlightedIndex && "cp-pop-item-highlight",
+                                            option.value === value && "cp-pop-item-active"
                                         )}
                                     >
-                                        <span className={cn(
-                                            "flex items-center gap-2 truncate",
-                                            option.value === value ? "text-indigo-600 font-medium" : "text-slate-900"
-                                        )}>
-                                            {option.icon}
-                                            {option.label}
-                                        </span>
+                                        {option.icon && (
+                                            <span className="cp-pop-item-icon">{option.icon}</span>
+                                        )}
+                                        <span className="cp-pop-item-label">{option.label}</span>
                                         {option.value === value && (
-                                            <Check className="w-4 h-4 text-indigo-600" />
+                                            <Check className="w-4 h-4 flex-shrink-0" />
                                         )}
                                     </button>
                                 ))
@@ -279,14 +273,14 @@ export function Select({
                     return createPortal(
                         <div
                             data-select-dropdown
-                            className="bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-200/50 overflow-hidden animate-scale-in origin-top"
+                            role="listbox"
+                            className="cp-pop cp-pop-flush"
                             style={{
                                 position: "fixed",
                                 top: dropdownRect.top,
                                 left: dropdownRect.left,
                                 width: dropdownRect.width,
                                 minWidth: "10rem",
-                                zIndex: 1100,
                             }}
                         >
                             {dropdownContent}
@@ -457,69 +451,56 @@ export function MultiSelect({
             {isOpen && dropdownRect && typeof document !== "undefined" && createPortal(
                 <div
                     data-multiselect-dropdown
-                    className="bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-200/50 overflow-hidden animate-scale-in origin-top"
+                    role="listbox"
+                    aria-multiselectable="true"
+                    className="cp-pop cp-pop-flush"
                     style={{
                         position: "fixed",
                         top: dropdownRect.top,
                         left: dropdownRect.left,
                         width: dropdownRect.width,
                         minWidth: "10rem",
-                        zIndex: 1100,
                     }}
                 >
                     {/* Search */}
-                    <div className="p-2 border-b border-slate-100">
+                    <div className="cp-pop-search">
                         <input
                             type="text"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             placeholder="Rechercher..."
-                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
                         />
                     </div>
 
                     {/* Options */}
-                    <div className="max-h-60 overflow-y-auto">
+                    <div className="cp-pop-scroll cp-pop-items">
                         {filteredOptions.length === 0 ? (
-                            <div className="px-4 py-3 text-sm text-slate-500 text-center">
-                                Aucun résultat
-                            </div>
+                            <div className="cp-pop-empty">Aucun résultat</div>
                         ) : (
-                            filteredOptions.map((option) => (
-                                <button
-                                    key={option.value}
-                                    type="button"
-                                    onClick={() => toggleOption(option.value)}
-                                    disabled={
-                                        option.disabled ||
-                                        (!!maxSelections &&
-                                            value.length >= maxSelections &&
-                                            !value.includes(option.value))
-                                    }
-                                    className={cn(
-                                        "w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50",
-                                        (option.disabled ||
+                            filteredOptions.map((option) => {
+                                const checked = value.includes(option.value);
+                                return (
+                                    <button
+                                        key={option.value}
+                                        type="button"
+                                        role="option"
+                                        aria-selected={checked}
+                                        onClick={() => toggleOption(option.value)}
+                                        disabled={
+                                            option.disabled ||
                                             (!!maxSelections &&
                                                 value.length >= maxSelections &&
-                                                !value.includes(option.value))) &&
-                                        "opacity-50 cursor-not-allowed"
-                                    )}
-                                >
-                                    <div
-                                        className={cn(
-                                            "w-4 h-4 rounded border flex items-center justify-center",
-                                            value.includes(option.value)
-                                                ? "bg-indigo-500 border-indigo-500"
-                                                : "border-slate-300"
-                                        )}
+                                                !checked)
+                                        }
+                                        className={cn("cp-pop-item", checked && "cp-pop-item-active")}
                                     >
-                                        {value.includes(option.value) && (
-                                            <Check className="w-3 h-3 text-white" />
-                                        )}
-                                    </div>
-                                    <span className="truncate text-slate-900">{option.label}</span>
-                                </button>
-                            ))
+                                        <span className={cn("cp-pop-check", checked && "cp-pop-check-on")}>
+                                            {checked && <Check className="w-3 h-3" />}
+                                        </span>
+                                        <span className="cp-pop-item-label">{option.label}</span>
+                                    </button>
+                                );
+                            })
                         )}
                     </div>
                 </div>,

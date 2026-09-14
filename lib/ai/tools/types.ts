@@ -46,6 +46,19 @@ export interface AIRequestContext {
 
     /** Resolution timestamp — surfaced to the model so it can date its answer. */
     resolvedAt: Date;
+
+    /**
+     * Write calls still allowed in this assistant turn. Decremented by the
+     * executor after each successful mutating tool. Undefined means "not
+     * tracked", which only happens in unit tests of pure read paths.
+     */
+    writeBudgetRemaining?: number;
+
+    /**
+     * The assistant conversation this request belongs to. Recorded on anything
+     * the AI creates, so a manager can open the exchange that produced it.
+     */
+    conversationId?: string;
 }
 
 // ============================================
@@ -73,8 +86,13 @@ export interface ToolDefinition<TArgs = unknown, TResult = unknown> {
     allowedRoles: UserRole[];
     /** Effective permission codes required on top of the role check. */
     requiredPermissions?: string[];
-    /** Read-only is the only supported mode in this phase. */
-    mutates: false;
+    /**
+     * True for tools with side effects. Write tools are gated the same way as
+     * reads (role + permission + active account) and additionally capped at
+     * MAX_WRITE_CALLS_PER_REQUEST per assistant turn, so a tool-calling loop
+     * cannot amplify one user message into a burst of writes.
+     */
+    mutates: boolean;
     /** Must never call Prisma without applying scope from `ctx`. */
     execute: (args: TArgs, ctx: AIRequestContext) => Promise<TResult>;
 }

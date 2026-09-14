@@ -1458,18 +1458,16 @@ export default function FilesExplorer() {
         createPortal(
           <div
             ref={ctxMenuRef}
-            className="fixed z-[9999] w-56 rounded-2xl border border-slate-200/80 bg-white/95 backdrop-blur-xl shadow-2xl py-1.5 animate-scale-in text-xs"
+            className="cp-pop cp-pop-items fixed w-56"
             style={{
               left: Math.min(ctxMenuPos.x, window.innerWidth - 240),
               top: Math.min(ctxMenuPos.y, window.innerHeight - 320),
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="h-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-t-2xl -mt-1.5 mb-1" />
-
             {ctxMenuTarget.kind === "file" && (
               <button
-                className="w-full px-3 py-2 text-left flex items-center gap-2 text-slate-700 hover:bg-slate-50 font-medium"
+                className="cp-pop-item"
                 onClick={() => {
                   setPreviewFile(ctxMenuTarget.item as FileItem);
                   setPreviewOpen(true);
@@ -1482,7 +1480,7 @@ export default function FilesExplorer() {
             )}
 
             <button
-              className="w-full px-3 py-2 text-left flex items-center gap-2 text-slate-700 hover:bg-slate-50"
+              className="cp-pop-item"
               onClick={() => {
                 setInspectorTarget({ kind: ctxMenuTarget.kind, item: ctxMenuTarget.item });
                 setDetailsOpen(true);
@@ -1494,7 +1492,7 @@ export default function FilesExplorer() {
             </button>
 
             <button
-              className="w-full px-3 py-2 text-left flex items-center gap-2 text-slate-700 hover:bg-slate-50"
+              className="cp-pop-item"
               onClick={() => {
                 setShareTarget({ kind: ctxMenuTarget.kind, item: ctxMenuTarget.item });
                 setShareMode("link");
@@ -1508,7 +1506,7 @@ export default function FilesExplorer() {
 
             {!ctxMenuTarget.isDriveItem && (
               <button
-                className="w-full px-3 py-2 text-left flex items-center gap-2 text-slate-700 hover:bg-slate-50"
+                className="cp-pop-item"
                 onClick={() => {
                   setShareTarget({ kind: ctxMenuTarget.kind, item: ctxMenuTarget.item });
                   setShareMode("direct");
@@ -1523,9 +1521,9 @@ export default function FilesExplorer() {
 
             {!ctxMenuTarget.isDriveItem && (
               <>
-                <div className="h-px bg-slate-100 my-1" />
+                <div className="cp-pop-separator" />
                 <button
-                  className="w-full px-3 py-2 text-left flex items-center gap-2 text-slate-700 hover:bg-slate-50"
+                  className="cp-pop-item"
                   onClick={() => {
                     setRenameTarget({ kind: ctxMenuTarget.kind, item: ctxMenuTarget.item });
                     setRenameOpen(true);
@@ -1536,7 +1534,7 @@ export default function FilesExplorer() {
                   Renommer
                 </button>
                 <button
-                  className="w-full px-3 py-2 text-left flex items-center gap-2 text-slate-700 hover:bg-slate-50"
+                  className="cp-pop-item"
                   onClick={() => {
                     setMoveTarget({ kind: ctxMenuTarget.kind, item: ctxMenuTarget.item });
                     setMoveOpen(true);
@@ -1551,9 +1549,9 @@ export default function FilesExplorer() {
 
             {ctxMenuTarget.isDriveItem && (
               <>
-                <div className="h-px bg-slate-100 my-1" />
+                <div className="cp-pop-separator" />
                 <button
-                  className="w-full px-3 py-2 text-left flex items-center gap-2 text-blue-600 hover:bg-blue-50 font-medium"
+                  className="cp-pop-item cp-pop-item-active"
                   onClick={() => {
                     if (ctxMenuTarget.kind === "file") handleImportFromDrive(ctxMenuTarget.item as FileItem);
                     setCtxMenuPos(null);
@@ -1565,9 +1563,9 @@ export default function FilesExplorer() {
               </>
             )}
 
-            <div className="h-px bg-slate-100 my-1" />
+            <div className="cp-pop-separator" />
             <button
-              className="w-full px-3 py-2 text-left flex items-center gap-2 text-red-600 hover:bg-red-50"
+              className="cp-pop-item cp-pop-item-danger"
               onClick={() => {
                 if (ctxMenuTarget.kind === "file") handleDeleteFile(ctxMenuTarget.item as FileItem);
                 else handleDeleteFolder(ctxMenuTarget.item as FolderItem);

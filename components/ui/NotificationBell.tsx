@@ -185,10 +185,6 @@ export function NotificationBell() {
                     60%       { transform: rotate(-4deg); }
                     75%       { transform: rotate(2deg); }
                 }
-                @keyframes notifDrop {
-                    from { opacity:0; transform: translateY(-10px) scale(0.97); }
-                    to   { opacity:1; transform: translateY(0) scale(1); }
-                }
                 @keyframes notifItemIn {
                     from { opacity:0; transform: translateX(-8px); }
                     to   { opacity:1; transform: translateX(0); }
@@ -236,15 +232,7 @@ export function NotificationBell() {
 
                 {/* ── Dropdown Panel ── */}
                 {isOpen && (
-                    <div
-                        className="absolute right-0 mt-2.5 w-[380px] max-w-[calc(100vw-1.5rem)] z-50 overflow-hidden"
-                        style={{
-                            animation: "notifDrop 0.22s cubic-bezier(0.22,1,0.36,1)",
-                            borderRadius: "20px",
-                            background: "white",
-                            boxShadow: "0 20px 60px rgba(0,0,0,0.12), 0 4px 20px rgba(40,144,248,0.08), 0 0 0 1px rgba(226,232,240,0.8)",
-                        }}
-                    >
+                    <div className="cp-pop cp-pop-flush cp-pop-origin-tr absolute right-0 mt-2.5 w-[380px] max-w-[calc(100vw-1.5rem)]">
                         {/* ── Header ── */}
                         <div className="px-4 pt-4 pb-3" style={{ borderBottom: "1px solid #F1F5F9" }}>
                             <div className="flex items-center justify-between mb-3">

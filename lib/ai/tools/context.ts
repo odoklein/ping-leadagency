@@ -10,6 +10,7 @@ import type { UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AIRequestContext, ToolAuthorizationError } from "./types";
 import { resolveScope, ScopeInputs } from "./scope";
+import { MAX_WRITE_CALLS_PER_REQUEST } from "./helpers";
 
 /**
  * Effective permission codes for a user: role defaults, then per-user overrides.
@@ -134,7 +135,7 @@ export async function buildAIRequestContext(
         permissions,
     };
 
-    return resolveScope(inputs);
+    return { ...resolveScope(inputs), writeBudgetRemaining: MAX_WRITE_CALLS_PER_REQUEST };
 }
 
 /** Compact, model-facing description of the caller's scope. */

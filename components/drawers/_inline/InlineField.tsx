@@ -308,7 +308,7 @@ export function InlineSelect({
                 createPortal(
                     <div
                         data-inline-select
-                        className="fixed z-[120] bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-900/10 overflow-hidden animate-scale-in origin-top py-1"
+                        className="cp-pop cp-pop-items fixed"
                         style={{ top: rect.top, left: rect.left, minWidth: rect.width }}
                     >
                         {options.map((opt) => (
@@ -317,13 +317,13 @@ export function InlineSelect({
                                 type="button"
                                 onClick={() => handlePick(opt.value)}
                                 className={cn(
-                                    "w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors hover:bg-indigo-50",
-                                    opt.value === value && "bg-indigo-50/60 text-indigo-700 font-medium"
+                                    "cp-pop-item",
+                                    opt.value === value && "cp-pop-item-active"
                                 )}
                             >
                                 {opt.icon}
-                                <span className="flex-1 truncate">{opt.label}</span>
-                                {opt.value === value && <Check className="w-4 h-4 text-indigo-600" />}
+                                <span className="cp-pop-item-label">{opt.label}</span>
+                                {opt.value === value && <Check className="w-4 h-4 flex-shrink-0" />}
                             </button>
                         ))}
                     </div>,
@@ -420,7 +420,7 @@ export function PopoverPanel({ open, onClose, anchor, width = 320, children, ali
     return createPortal(
         <div
             ref={panelRef}
-            className="fixed z-[130] bg-white border border-slate-200 rounded-2xl shadow-2xl shadow-slate-900/10 animate-scale-in origin-top"
+            className="cp-pop fixed"
             style={{ top: rect.top, left: rect.left, width }}
         >
             {children}

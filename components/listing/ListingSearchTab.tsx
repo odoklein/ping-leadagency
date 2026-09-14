@@ -988,14 +988,14 @@ export function ListingSearchTab({ onImport }: ListingSearchTabProps) {
                                             Colonnes
                                         </button>
                                         {showColumnPicker && (
-                                            <div className="absolute left-0 top-full mt-1 z-50 min-w-[200px] py-1.5 bg-white border border-[#E8EBF0] rounded-lg shadow-lg">
-                                                <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                                            <div className="cp-pop cp-pop-items absolute left-0 top-full mt-1 min-w-[200px]">
+                                                <div className="px-2.5 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                                                     Afficher les colonnes
                                                 </div>
                                                 {columnPickerOptions.map((opt) => (
                                                     <label
                                                         key={opt.key}
-                                                        className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-[#F4F6F9] cursor-pointer text-[12px] text-slate-700"
+                                                        className="cp-pop-item"
                                                     >
                                                         <input
                                                             type="checkbox"

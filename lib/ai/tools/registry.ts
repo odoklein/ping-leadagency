@@ -15,8 +15,14 @@ import { getActivitySummary, getCampaignMetrics } from "./definitions/metrics";
 import { getMyMeetings } from "./definitions/meetings";
 import { getListHealth, getProspectHistory } from "./definitions/prospects";
 import { searchPingHelp } from "./definitions/knowledge";
+import { createSupportTicketTool, getMyTickets } from "./definitions/support";
 
-/** Phase 1 catalogue: read-only, no side effects. */
+/**
+ * The catalogue. Reads are the default; the WRITE section below is the entire
+ * mutating surface of the assistant and should stay short enough to review at a
+ * glance. Every write tool is built with `defineWriteTool`, so `grep
+ * defineWriteTool lib/ai/tools/definitions` lists them all.
+ */
 export const AI_TOOLS: AnyToolDefinition[] = [
     // Identity & entitlements
     getMyProfile,
@@ -33,6 +39,13 @@ export const AI_TOOLS: AnyToolDefinition[] = [
     getListHealth,
     // Product knowledge
     searchPingHelp,
+    // Support (read)
+    getMyTickets,
+
+    // ── WRITE ────────────────────────────────────────────────────────────────
+    // Side effects live here and nowhere else. Capped at
+    // MAX_WRITE_CALLS_PER_REQUEST successful calls per assistant turn.
+    createSupportTicketTool,
 ];
 
 const BY_NAME = new Map(AI_TOOLS.map((tool) => [tool.name, tool]));

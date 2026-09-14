@@ -164,7 +164,7 @@ export function MailboxSwitcher({
             {/* Dropdown */}
             {isOpen && (
                 <div
-                    className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-[#DDE5E2] rounded-lg shadow-[0_14px_35px_rgba(40,144,248,0.12)] py-1.5 max-h-72 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-150"
+                    className="cp-pop cp-pop-scroll cp-pop-items absolute left-0 right-0 top-full mt-1 max-h-72"
                     role="listbox"
                 >
                     {/* All mailboxes option */}
@@ -174,8 +174,8 @@ export function MailboxSwitcher({
                             setIsOpen(false);
                         }}
                         className={cn(
-                            "w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-slate-50 transition-colors",
-                            !selectedMailboxId && "bg-[#e6f0fa]/60 font-semibold"
+                            "cp-pop-row flex items-center gap-2.5 px-2.5 py-2",
+                            !selectedMailboxId && "cp-pop-row-active"
                         )}
                         role="option"
                         aria-selected={!selectedMailboxId}

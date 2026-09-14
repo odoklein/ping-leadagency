@@ -35,12 +35,12 @@ export function checkToolAccess(
         return { allowed: false, code: "inactive_account", reason: "Compte desactive." };
     }
 
-    if (tool.mutates !== false) {
-        // Belt and braces: this phase is read-only by construction.
+    if (tool.mutates && ctx.writeBudgetRemaining !== undefined && ctx.writeBudgetRemaining <= 0) {
+        // One user message must not turn into a burst of writes via the tool loop.
         return {
             allowed: false,
-            code: "write_disabled",
-            reason: "Les actions d'ecriture ne sont pas activees.",
+            code: "write_budget_exhausted",
+            reason: "Limite d'actions d'ecriture atteinte pour cette demande.",
         };
     }
 

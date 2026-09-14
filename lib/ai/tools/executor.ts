@@ -20,6 +20,8 @@ import { wrapToolPayload } from "./redact";
 /** Hard cap on tool calls per assistant request (risk R3: amplification). */
 export const MAX_TOOL_CALLS_PER_REQUEST = 6;
 
+export { MAX_WRITE_CALLS_PER_REQUEST } from "./helpers";
+
 export interface ToolCallRequest {
     id: string;
     name: string;
@@ -60,6 +62,12 @@ export async function executeToolCall(
         const tool = getTool(call.name);
         const args = authorizeToolCall(tool, call.name, parseArguments(call.arguments), ctx);
         const data = await tool!.execute(args, ctx);
+
+        // Spend the write budget only on success: a failed write left no trace,
+        // so the model is allowed one genuine attempt.
+        if (tool!.mutates && typeof ctx.writeBudgetRemaining === "number") {
+            ctx.writeBudgetRemaining -= 1;
+        }
 
         return {
             tool: call.name,

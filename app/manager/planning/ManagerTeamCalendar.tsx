@@ -379,7 +379,7 @@ export function ManagerTeamCalendar() {
                                 )}
                             </button>
                             {filterOpen && (
-                                <div className="absolute right-0 top-12 z-40 w-[290px] rounded-xl border border-[#DDE4EA] bg-white p-3 shadow-[0_18px_45px_rgba(20,40,60,0.15)]">
+                                <div className="cp-pop cp-pop-origin-tr absolute right-0 top-12 w-[290px] p-3">
                                     <label className="relative block">
                                         <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[#8290A0]" />
                                         <input

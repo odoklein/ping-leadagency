@@ -243,11 +243,43 @@ describe("checkToolAccess: role, permission and account state", () => {
         );
     });
 
-    it("refuses any tool that declares itself mutating", () => {
+    // Write tools were blanket-denied until step 6 of the phased plan opened.
+    // They are now gated exactly like reads, plus a per-turn write budget.
+    it("puts a mutating tool through the same role gate as a read", () => {
         const writeTool = { ...probeTool, mutates: true } as unknown as typeof probeTool;
-        const decision = checkToolAccess(writeTool, ctx({ role: "MANAGER", permissions: ["pages.analytics"] }));
+        const decision = checkToolAccess(
+            writeTool,
+            ctx({ role: "SDR", permissions: ["pages.analytics"], writeBudgetRemaining: 1 })
+        );
         assert.equal(decision.allowed, false);
-        assert.equal(decision.code, "write_disabled");
+        assert.equal(decision.code, "role_denied");
+    });
+
+    it("allows a mutating tool when entitled and the write budget is unspent", () => {
+        const writeTool = { ...probeTool, mutates: true } as unknown as typeof probeTool;
+        const decision = checkToolAccess(
+            writeTool,
+            ctx({ role: "MANAGER", permissions: ["pages.analytics"], writeBudgetRemaining: 1 })
+        );
+        assert.equal(decision.allowed, true);
+    });
+
+    it("refuses a second write in the same turn once the budget is spent", () => {
+        const writeTool = { ...probeTool, mutates: true } as unknown as typeof probeTool;
+        const decision = checkToolAccess(
+            writeTool,
+            ctx({ role: "MANAGER", permissions: ["pages.analytics"], writeBudgetRemaining: 0 })
+        );
+        assert.equal(decision.allowed, false);
+        assert.equal(decision.code, "write_budget_exhausted");
+    });
+
+    it("never lets an exhausted write budget block a read tool", () => {
+        const decision = checkToolAccess(
+            probeTool,
+            ctx({ role: "MANAGER", permissions: ["pages.analytics"], writeBudgetRemaining: 0 })
+        );
+        assert.equal(decision.allowed, true);
     });
 });
 
@@ -283,9 +315,16 @@ describe("argument validation: the model's JSON is untrusted input", () => {
 // ============================================
 
 describe("registry invariants", () => {
-    it("exposes only read-only tools in this phase", () => {
+    // Reads are the default. A tool that mutates must say so explicitly AND be
+    // on the reviewed list asserted further down in "tool surface".
+    it("keeps every tool read-only unless it is a declared write tool", () => {
+        const declaredWrites = new Set(["create_support_ticket"]);
         for (const tool of AI_TOOLS) {
-            assert.equal(tool.mutates, false, `${tool.name} must be read-only`);
+            if (declaredWrites.has(tool.name)) {
+                assert.equal(tool.mutates, true, `${tool.name} must declare itself mutating`);
+            } else {
+                assert.equal(tool.mutates, false, `${tool.name} must be read-only`);
+            }
         }
     });
 
@@ -508,10 +547,11 @@ describe("tool surface: nothing sensitive is reachable", () => {
         }
     });
 
-    it("exposes the expected read-only catalogue", () => {
+    it("exposes exactly the expected catalogue", () => {
         assert.deepEqual(
             AI_TOOLS.map((t) => t.name).sort(),
             [
+                "create_support_ticket",
                 "get_activity_summary",
                 "get_campaign_metrics",
                 "get_list_health",
@@ -520,9 +560,31 @@ describe("tool surface: nothing sensitive is reachable", () => {
                 "get_my_meetings",
                 "get_my_permissions",
                 "get_my_profile",
+                "get_my_support_tickets",
                 "get_prospect_history",
                 "search_ping_help",
             ]
         );
+    });
+
+    // The whole mutating surface, asserted by name. Adding a write tool must
+    // fail this test until someone updates it deliberately.
+    it("keeps the mutating surface to the reviewed list", () => {
+        assert.deepEqual(
+            AI_TOOLS.filter((t) => t.mutates).map((t) => t.name).sort(),
+            ["create_support_ticket"]
+        );
+    });
+
+    it("files a ticket as the caller: the model cannot name a requester", () => {
+        const tool = getTool("create_support_ticket");
+        assert.ok(tool, "create_support_ticket must be registered");
+        const props = Object.keys(tool!.parameters.properties);
+        for (const forbidden of ["requesterId", "clientId", "userId", "status", "assigneeId"]) {
+            assert.ok(
+                !props.includes(forbidden),
+                `create_support_ticket must not accept ${forbidden} from the model`
+            );
+        }
     });
 });

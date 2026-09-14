@@ -453,8 +453,8 @@ export function ClientSearch({ onSelect, selectedClient, allowManualEntry = true
 
             {/* Results dropdown */}
             {showResults && searchSource === "our" && crmResults.length > 0 && (
-                <div className="absolute z-50 w-full mt-2 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-xl shadow-xl shadow-slate-200/40 max-h-72 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
-                    <div className="px-3 py-2 border-b border-slate-100">
+                <div className="cp-pop cp-pop-scroll absolute w-full mt-2 max-h-72">
+                    <div className="px-2 pt-1 pb-2">
                         <p className="text-xs font-medium text-slate-400">
                             {crmResults.length} client{crmResults.length > 1 ? "s" : ""} (complétez les infos légales après sélection)
                         </p>
@@ -463,7 +463,7 @@ export function ClientSearch({ onSelect, selectedClient, allowManualEntry = true
                         <button
                             key={crm.id}
                             onClick={() => handleSelectCrmClient(crm)}
-                            className="w-full text-left px-4 py-3 hover:bg-indigo-50/50 transition-colors duration-100 border-b border-slate-50 last:border-b-0 group"
+                            className="cp-pop-row px-3 py-2.5 group"
                         >
                             <div className="flex items-start gap-3">
                                 <div className="w-9 h-9 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
@@ -486,15 +486,15 @@ export function ClientSearch({ onSelect, selectedClient, allowManualEntry = true
             )}
 
             {showResults && searchSource === "pappers" && pappersResults.length > 0 && (
-                <div className="absolute z-50 w-full mt-2 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-xl shadow-xl shadow-slate-200/40 max-h-72 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
-                    <div className="px-3 py-2 border-b border-slate-100">
+                <div className="cp-pop cp-pop-scroll absolute w-full mt-2 max-h-72">
+                    <div className="px-2 pt-1 pb-2">
                         <p className="text-xs font-medium text-slate-400">{pappersResults.length} résultat(s)</p>
                     </div>
                     {pappersResults.map((client, idx) => (
                         <button
                             key={client.id ?? idx}
                             onClick={() => handleSelectBillingClient(client)}
-                            className="w-full text-left px-4 py-3 hover:bg-indigo-50/50 transition-colors duration-100 border-b border-slate-50 last:border-b-0 group"
+                            className="cp-pop-row px-3 py-2.5 group"
                         >
                             <div className="flex items-start gap-3">
                                 <div className="w-9 h-9 rounded-lg bg-slate-100 group-hover:bg-indigo-100 flex items-center justify-center flex-shrink-0 transition-colors duration-150">

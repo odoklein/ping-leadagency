@@ -2395,30 +2395,7 @@ textarea::placeholder {
     color: #fff;
 }
 
-/* --- User Button --- */
-.cp-user-btn {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 8px;
-    border-radius: 8px;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
-    text-align: left;
-}
-
-.cp-user-btn:hover {
-    background: rgba(255,255,255,0.07);
-}
-
-.cp-user-btn-collapsed {
-    justify-content: center;
-    padding: 6px;
-}
-
+/* --- Avatar tile (client & commercial meetings pages) --- */
 .cp-avatar {
     position: relative;
     width: 32px;
@@ -2435,118 +2412,6 @@ textarea::placeholder {
     letter-spacing: -0.01em;
 }
 
-.cp-avatar-status {
-    position: absolute;
-    bottom: -1px;
-    right: -1px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #22c55e;
-    border: 1.5px solid #0a302d;
-}
-
-.cp-user-info {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-}
-
-.cp-user-name {
-    font-size: 12px;
-    font-weight: 500;
-    color: #fff;
-    line-height: 1.3;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.cp-user-role {
-    font-size: 10px;
-    color: rgba(255,255,255,0.30);
-    line-height: 1.3;
-}
-
-/* --- User Popover Menu --- */
-.cp-user-menu {
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 8px;
-    right: 8px;
-    background: #fff;
-    border: 1px solid rgba(0, 0, 0, 0.06);
-    border-radius: 10px;
-    box-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.1),
-        0 4px 12px -4px rgba(0, 0, 0, 0.06);
-    z-index: 100;
-    animation: cpMenuIn 150ms cubic-bezier(0.16, 1, 0.3, 1);
-    overflow: hidden;
-}
-
-@keyframes cpMenuIn {
-    from {
-        opacity: 0;
-        transform: translateY(4px) scale(0.97);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-}
-
-.cp-user-menu-header {
-    padding: 10px 12px;
-}
-
-.cp-user-menu-divider {
-    height: 1px;
-    background: var(--elan-paper);
-}
-
-.cp-user-menu-items {
-    padding: 4px;
-}
-
-.cp-user-menu-role {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 7px 10px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--elan-slate);
-    border-radius: 6px;
-}
-
-.cp-user-menu-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    padding: 7px 10px;
-    font-size: 12.5px;
-    font-weight: 500;
-    color: var(--elan-slate);
-    border: none;
-    background: none;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
-    text-align: left;
-}
-
-.cp-user-menu-item:hover {
-    background: #f5f6f8;
-    color: var(--elan-ink);
-}
-
-.cp-user-menu-item-danger:hover {
-    background: #fef2f2;
-    color: #dc2626;
-}
-
 /* --- Reduced Motion --- */
 @media (prefers-reduced-motion: reduce) {
 
@@ -2556,7 +2421,8 @@ textarea::placeholder {
     .cp-nav-icon-wrap,
     .cp-nav-label,
     .cp-brand-mark,
-    .cp-user-btn,
+    .cp-profile-trigger,
+    .cp-profile-bend,
     .cp-collapse-btn,
     .cp-tooltip-portal,
     .cp-nav-item-active::before {

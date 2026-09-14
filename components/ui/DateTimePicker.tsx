@@ -179,7 +179,7 @@ export function DateTimePicker({
                 createPortal(
                     <div
                         ref={dropdownRef}
-                        className="fixed w-[260px] max-h-[min(340px,80vh)] overflow-y-auto p-2.5 bg-white border border-slate-200 rounded-xl shadow-xl ring-1 ring-black/5 animate-scale-in origin-top-left"
+                        className="cp-pop fixed w-[260px] max-h-[min(340px,80vh)] overflow-y-auto"
                         style={{
                             top: position.top,
                             left: position.left,

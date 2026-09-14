@@ -80,14 +80,17 @@ export function DropdownMenu({ trigger, items, align = "right", width = 176, cla
             {open && rect && typeof document !== "undefined" && createPortal(
                 <div
                     ref={menuRef}
-                    className="bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 animate-scale-in origin-top"
-                    style={{ position: "fixed", top: rect.top, left: rect.left, width, zIndex: 1100 }}
+                    role="menu"
+                    className="cp-pop cp-pop-items"
+                    style={{ position: "fixed", top: rect.top, left: rect.left, width }}
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
                 >
                     {items.map((item, i) => (
-                        <div key={i}>
-                            {item.divider && i > 0 && <div className="my-1 border-t border-slate-100" />}
+                        <div key={i} className="contents">
+                            {item.divider && i > 0 && <div className="cp-pop-separator" />}
                             <button
+                                type="button"
+                                role="menuitem"
                                 onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
@@ -97,15 +100,12 @@ export function DropdownMenu({ trigger, items, align = "right", width = 176, cla
                                 }}
                                 disabled={item.disabled}
                                 className={cn(
-                                    "flex items-center gap-2.5 w-full px-3.5 py-2 text-sm transition-colors text-left",
-                                    item.disabled && "opacity-50 cursor-not-allowed",
-                                    item.variant === "danger"
-                                        ? "text-red-600 hover:bg-red-50"
-                                        : "text-slate-700 hover:bg-slate-50"
+                                    "cp-pop-item",
+                                    item.variant === "danger" && "cp-pop-item-danger"
                                 )}
                             >
-                                {item.icon}
-                                {item.label}
+                                {item.icon && <span className="cp-pop-item-icon">{item.icon}</span>}
+                                <span className="cp-pop-item-label">{item.label}</span>
                             </button>
                         </div>
                     ))}

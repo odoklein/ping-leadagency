@@ -27,6 +27,8 @@ export {
 export { ContextMenu, useContextMenu } from "./ContextMenu";
 export { DropdownMenu } from "./DropdownMenu";
 export type { DropdownMenuItem } from "./DropdownMenu";
+export { ProfileMenu } from "./ProfileMenu";
+export type { ProfileMenuItem } from "./ProfileMenu";
 
 // Page Scaffolding Components
 export { PageHeader } from "./PageHeader";

@@ -624,10 +624,10 @@ export function QuickEmailModal({
                                 )}
                                 {suggestedEmails.length > 0 && (
                                     <div
-                                        className="absolute left-0 right-0 top-full mt-1 z-10 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden"
+                                        className="cp-pop cp-pop-items absolute left-0 right-0 top-full mt-1"
                                         onMouseDown={(e) => e.preventDefault()}
                                     >
-                                        <p className="px-3 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-100">
+                                        <p className="px-2.5 pt-1 pb-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                                             Suggestions
                                         </p>
                                         {suggestedEmails.map((email) => (
@@ -635,7 +635,7 @@ export function QuickEmailModal({
                                                 key={email}
                                                 type="button"
                                                 onMouseDown={() => handleSelectSuggestion(email)}
-                                                className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                                                className="cp-pop-item"
                                             >
                                                 {email}
                                             </button>

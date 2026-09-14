@@ -160,9 +160,9 @@ export function DatePicker({
 
             {/* Calendar Dropdown */}
             {isOpen && (
-                <div className="absolute z-50 w-[300px] mt-2 bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-200/50 overflow-hidden animate-scale-in origin-top">
+                <div className="cp-pop cp-pop-flush absolute w-[300px] mt-2">
                     {/* Header */}
-                    <div className="flex items-center justify-between p-3 border-b border-slate-100">
+                    <div className="cp-pop-header justify-between">
                         <button
                             type="button"
                             onClick={goToPrevMonth}

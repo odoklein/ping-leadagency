@@ -242,7 +242,7 @@ function ColToggle({
                 Colonnes
             </button>
             {open && (
-                <div className="absolute right-0 top-11 z-30 w-52 rounded-2xl bg-white border border-slate-200 shadow-xl p-2 space-y-1">
+                <div className="cp-pop cp-pop-items cp-pop-origin-tr absolute right-0 top-11 w-52">
                     {ALL_COLS.map(c => {
                         const active = visible.has(c.key);
                         return (
@@ -251,8 +251,8 @@ function ColToggle({
                                 type="button"
                                 onClick={() => onToggle(c.key)}
                                 className={cn(
-                                    "w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-colors",
-                                    active ? "bg-slate-100 text-slate-900" : "text-slate-400 hover:text-slate-700"
+                                    "cp-pop-item justify-between",
+                                    active && "cp-pop-item-active"
                                 )}
                             >
                                 <span>{c.label}</span>
@@ -300,15 +300,15 @@ function DensityToggle({
                 Densité
             </button>
             {open && (
-                <div className="absolute right-0 top-11 z-30 w-40 rounded-2xl bg-white border border-slate-200 shadow-xl p-2 space-y-1">
+                <div className="cp-pop cp-pop-items cp-pop-origin-tr absolute right-0 top-11 w-40">
                     {options.map(opt => (
                         <button
                             key={opt.val}
                             type="button"
                             onClick={() => { onChange(opt.val); setOpen(false); }}
                             className={cn(
-                                "w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-colors",
-                                value === opt.val ? "bg-slate-100 text-slate-900" : "text-slate-400 hover:text-slate-700"
+                                "cp-pop-item justify-between",
+                                value === opt.val && "cp-pop-item-active"
                             )}
                         >
                             {opt.label}

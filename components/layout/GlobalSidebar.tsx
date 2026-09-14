@@ -13,6 +13,8 @@ import {
     Search,
     Command,
     ChevronRight,
+    Settings,
+    ShieldCheck,
     Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -23,6 +25,19 @@ import { UserRole } from "@prisma/client";
 import { formatCallbackDate } from "@/lib/utils/parseDateFromNote";
 import { ManagerSupportSidebarEntry } from "@/components/support/ManagerSupportSidebarEntry";
 import { ElanLogo } from "@/components/brand/ElanLogo";
+import { ProfileMenu, type ProfileMenuItem } from "@/components/ui/ProfileMenu";
+
+/**
+ * Settings destinations, per role. Not every role has one — SDR, BOOKER and
+ * the remaining roles have no settings route, so the entry is simply omitted
+ * rather than pointing at a 404.
+ */
+const ROLE_SETTINGS_PATH: Partial<Record<UserRole, string>> = {
+    MANAGER: "/manager/settings",
+    DEVELOPER: "/developer/settings",
+    CLIENT: "/client/portal/settings",
+    COMMERCIAL: "/commercial/portal/settings",
+};
 
 interface GlobalSidebarProps {
     navigation: NavSection[];
@@ -555,8 +570,6 @@ export function GlobalSidebar({ navigation }: GlobalSidebarProps) {
         meetingsToday: number;
         interestedToday: number;
     } | null>(null);
-    const [showUserMenu, setShowUserMenu] = useState(false);
-    const userMenuRef = useRef<HTMLDivElement>(null);
 
     const userRole = session?.user?.role as UserRole | undefined;
     const roleConfig = userRole ? ROLE_CONFIG[userRole] : null;
@@ -649,22 +662,6 @@ export function GlobalSidebar({ navigation }: GlobalSidebarProps) {
         };
     }, [userRole]);
 
-    useEffect(() => {
-        function handleClickOutside(e: MouseEvent) {
-            if (
-                userMenuRef.current &&
-                !userMenuRef.current.contains(e.target as Node)
-            ) {
-                setShowUserMenu(false);
-            }
-        }
-        if (showUserMenu) {
-            document.addEventListener("mousedown", handleClickOutside);
-        }
-        return () =>
-            document.removeEventListener("mousedown", handleClickOutside);
-    }, [showUserMenu]);
-
     const effectiveNavigation = useMemo(() => {
         const hasRappels = callbacksCount !== null || nextCallbackDate;
         const hasComms = commsUnreadCount > 0;
@@ -734,7 +731,37 @@ export function GlobalSidebar({ navigation }: GlobalSidebarProps) {
 
     const userName = session?.user?.name ?? "";
     const userEmail = session?.user?.email ?? "";
-    const userInitial = userName.charAt(0).toUpperCase() || "U";
+
+    const userMenuItems = useMemo<ProfileMenuItem[]>(() => {
+        const settingsPath = userRole ? ROLE_SETTINGS_PATH[userRole] : undefined;
+
+        return [
+            ...(roleConfig
+                ? [
+                      {
+                          label: "Role",
+                          value: roleConfig.label,
+                          icon: <ShieldCheck className="w-4 h-4" />,
+                      } satisfies ProfileMenuItem,
+                  ]
+                : []),
+            ...(settingsPath
+                ? [
+                      {
+                          label: "Parametres",
+                          href: settingsPath,
+                          icon: <Settings className="w-4 h-4" />,
+                      } satisfies ProfileMenuItem,
+                  ]
+                : []),
+            {
+                label: "Deconnexion",
+                variant: "danger",
+                icon: <LogOut className="w-4 h-4" />,
+                onClick: () => signOut({ callbackUrl: "/login" }),
+            },
+        ];
+    }, [roleConfig, userRole]);
 
     return (
         <>
@@ -851,7 +878,7 @@ export function GlobalSidebar({ navigation }: GlobalSidebarProps) {
                 </nav>
 
                 {/* Footer */}
-                <div className="cp-sidebar-footer" ref={userMenuRef}>
+                <div className="cp-sidebar-footer">
                     {/* Manager-only support entry (sits above the profile) */}
                     {userRole === "MANAGER" && (
                         <ManagerSupportSidebarEntry isExpanded={isExpanded} />
@@ -868,67 +895,14 @@ export function GlobalSidebar({ navigation }: GlobalSidebarProps) {
                         </button>
                     )}
 
-                    {/* User popover menu */}
-                    {showUserMenu && (
-                        <div className="cp-user-menu">
-                            <div className="cp-user-menu-header">
-                                <p className="text-[13px] font-semibold text-slate-900 truncate">
-                                    {userName}
-                                </p>
-                                <p className="text-[11px] text-slate-500 truncate">
-                                    {userEmail}
-                                </p>
-                            </div>
-                            <div className="cp-user-menu-divider" />
-                            <div className="cp-user-menu-items">
-                                {roleConfig && (
-                                    <div className="cp-user-menu-role">
-                                        <div className="w-2 h-2 rounded-[2px] bg-[#FF9E1B]" />
-                                        <span>{roleConfig.label}</span>
-                                    </div>
-                                )}
-                                <button
-                                    onClick={() =>
-                                        signOut({ callbackUrl: "/login" })
-                                    }
-                                    className="cp-user-menu-item cp-user-menu-item-danger"
-                                >
-                                    <LogOut className="w-3.5 h-3.5" />
-                                    <span>Deconnexion</span>
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* User button */}
-                    <button
-                        onClick={() => setShowUserMenu(!showUserMenu)}
-                        className={cn(
-                            "cp-user-btn",
-                            !isExpanded && "cp-user-btn-collapsed"
-                        )}
-                    >
-                        <div className="cp-avatar">
-                            <span>{userInitial}</span>
-                            <div className="cp-avatar-status" />
-                        </div>
-                        {isExpanded && (
-                            <div className="cp-user-info">
-                                <p className="cp-user-name">{userName}</p>
-                                <p className="cp-user-role">
-                                    {roleConfig?.label ?? "User"}
-                                </p>
-                            </div>
-                        )}
-                        {isExpanded && (
-                            <ChevronRight
-                                className={cn(
-                                    "w-3.5 h-3.5 text-slate-400 transition-transform duration-200",
-                                    showUserMenu && "rotate-90"
-                                )}
-                            />
-                        )}
-                    </button>
+                    {/* Profile button + account popover */}
+                    <ProfileMenu
+                        name={userName}
+                        email={userEmail}
+                        role={roleConfig?.label}
+                        isExpanded={isExpanded}
+                        items={userMenuItems}
+                    />
                 </div>
             </aside>
         </>
