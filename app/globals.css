@@ -5657,3 +5657,102 @@ textarea::placeholder {
     border-color: #0c3b38 !important;
     box-shadow: 0 0 0 3px rgba(12, 59, 56, 0.12) !important;
 }
+
+/* ============================================
+   ASSISTANT FAB (components/assistant/AssistantFab.tsx)
+   Floating launcher that replaced the client support chat bubble. Shares the
+   assistant panel's accent so the button and the panel it opens read as one
+   thing. Sits just under the panel's own z-index so the panel can cover it.
+   ============================================ */
+
+.cp-assistant-fab-wrap {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    /* Below .cp-panel-root (90) is not enough: the client portal renders inside
+       stacking contexts of its own, so this needs to clear page chrome. */
+    z-index: 80;
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+.cp-assistant-fab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 48px;
+    padding: 0 18px;
+    border: none;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #2890F8 0%, #5BAEFC 100%);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    cursor: pointer;
+    box-shadow:
+        0 10px 28px -8px rgba(40, 144, 248, 0.55),
+        0 2px 8px rgba(12, 32, 64, 0.12);
+    transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 160ms ease, background 160ms ease;
+}
+
+.cp-assistant-fab:hover {
+    transform: translateY(-2px);
+    box-shadow:
+        0 16px 34px -8px rgba(40, 144, 248, 0.6),
+        0 3px 10px rgba(12, 32, 64, 0.14);
+}
+
+.cp-assistant-fab:active {
+    transform: translateY(0);
+}
+
+.cp-assistant-fab:focus-visible {
+    outline: none;
+    box-shadow:
+        0 0 0 3px rgba(40, 144, 248, 0.35),
+        0 10px 28px -8px rgba(40, 144, 248, 0.55);
+}
+
+/* Open: step back so the panel is clearly the foreground. */
+.cp-assistant-fab.is-open {
+    background: #fff;
+    color: #1A75CE;
+    box-shadow:
+        inset 0 0 0 1px #E8EBF0,
+        0 8px 22px -10px rgba(12, 32, 64, 0.28);
+}
+
+.cp-assistant-fab-label {
+    white-space: nowrap;
+}
+
+@media (max-width: 639px) {
+    .cp-assistant-fab-wrap {
+        right: 16px;
+        bottom: 16px;
+    }
+
+    /* Collapse to a circle: a pill this wide crowds a phone viewport. */
+    .cp-assistant-fab {
+        width: 52px;
+        height: 52px;
+        padding: 0;
+        justify-content: center;
+        gap: 0;
+    }
+
+    .cp-assistant-fab-label {
+        display: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cp-assistant-fab {
+        transition: none;
+    }
+
+    .cp-assistant-fab:hover {
+        transform: none;
+    }
+}

@@ -84,6 +84,7 @@ function InnerLayout({
 
     const userRole = session?.user?.role as UserRole | undefined;
     const roleConfig = userRole ? ROLE_CONFIG[userRole] : null;
+    const usesFloatingAssistant = userRole === "CLIENT" || userRole === "COMMERCIAL";
     const isSdrArea = userRole === UserRole.SDR && pathname.startsWith("/sdr");
 
     const [isDailyReviewModalOpen, setIsDailyReviewModalOpen] = useState(false);
@@ -548,7 +549,11 @@ function InnerLayout({
                         >
                             <RefreshCw className="w-3.5 h-3.5" />
                         </button>
-                        <AssistantLauncher />
+                        {/* The client/commercial portals mount AssistantFab instead — a
+                            floating launcher that replaced their support chat bubble.
+                            Rendering both would give the same panel two owners (and two
+                            Ctrl+Shift+K handlers fighting each other). */}
+                        {!usesFloatingAssistant && <AssistantLauncher />}
                         <IntakeTriggerButton />
                         <NotificationBell />
                     </div>
